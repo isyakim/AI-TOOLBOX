@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *;">
+    <title>AI工具箱</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- 之前的HTML结构 -->
+    <div class="app-container">
+      <!-- 侧边栏 -->
+      <div class="sidebar" id="sidebar">
+          <div class="sidebar-toggle" id="sidebar-toggle" title="折叠/展开">
+              <span class="toggle-icon">☰</span>
+          </div>
+          
+          <div class="logo">
+              <h1>AI工具箱</h1>
+          </div>
+          
+          <div class="nav-section">
+              <div class="nav-item active" data-page="chat" title="智能对话">
+                  <i>💬</i>
+                  <span class="nav-text">智能对话</span>
+              </div>
+              <div class="nav-item" data-page="tools" title="AI工具集">
+                  <i>🛠️</i>
+                  <span class="nav-text">AI工具集</span>
+              </div>
+              <div class="nav-item" data-page="settings" title="设置">
+                  <i>⚙️</i>
+                  <span class="nav-text">设置</span>
+              </div>
+          </div>
+          
+          <div class="nav-section" style="margin-top: auto;">
+              <div class="nav-item" data-page="about" title="关于">
+                  <i>ℹ️</i>
+                  <span class="nav-text">关于</span>
+              </div>
+          </div>
+      </div>
+      
+      <!-- 主内容区 -->
+      <div class="main-content">
+          <div class="header">
+              <div class="header-title">智能对话</div>
+              <div class="header-actions">
+                  <button class="theme-toggle" id="theme-toggle" title="切换主题">
+                      🎨
+                  </button>
+                  <div class="api-status">
+                      <div class="status-dot"></div>
+                      <span>API连接正常</span>
+                  </div>
+              </div>
+          </div>
+          
+          <div class="content-area">
+              <!-- 页面容器，所有页面内容将动态加载到这里 -->
+              <div id="page-container"></div>
+          </div>
+      </div>
+  </div>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
