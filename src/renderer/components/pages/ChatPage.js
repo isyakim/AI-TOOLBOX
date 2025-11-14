@@ -9,6 +9,44 @@ export class ChatPage {
     this.configManager = configManager;
     this.sessionManager = new SessionManager();
     this.currentSessionId = null;
+    this.roleModes = [
+      {
+        id: 'roo-helper',
+        title: 'Roo · 默认助手',
+        desc: '友好万能型，回答清晰有条理。',
+        prompt: '你是 Roo，一位沉稳可靠的助手。请以结构清晰、语气友好的方式回答，并在需要时给出可执行的步骤。'
+      },
+      {
+        id: 'roo-coder',
+        title: 'Roo · 代码专家',
+        desc: '偏工程实现，输出代码与命令。',
+        prompt: '你是 Roo 的代码专家。优先输出可运行的代码片段与调试命令，必要时说明风险或性能建议。'
+      },
+      {
+        id: 'roo-product',
+        title: 'Roo · 产品参谋',
+        desc: '聚焦体验和策略，强调用户价值。',
+        prompt: '你是 Roo 的产品参谋。回答需要兼顾用户价值、成功指标与落地建议。'
+      },
+      {
+        id: 'roo-challenger',
+        title: 'Roo · 思辨导师',
+        desc: '喜欢提问和反思，激发更深层思考。',
+        prompt: '你是 Roo 的思辨导师。请通过提问和反例帮助用户更深入地思考问题。'
+      }
+    ];
+    this.currentRoleIndex = 0;
+    this.isGenerating = false;
+    this.stopRequested = false;
+    this.activeAssistantMessage = null;
+    this.availableModels = this.getAvailableModelsFromStorage();
+    this.selectedModelValue = this.availableModels[0]?.value || this.getDefaultModelOptions()[0].value;
+    this.handleAvailableModelsUpdate = (event) => {
+      const models = event.detail?.models || [];
+      this.availableModels = models.map(m => ({ value: m, label: m }));
+      this.updateModelSelect();
+    };
+    window.addEventListener('availableModelsUpdated', this.handleAvailableModelsUpdate);
     this.init();
   }
 
@@ -20,6 +58,13 @@ export class ChatPage {
   }
 
   render() {
+    const roleOptionsHtml = this.roleModes.map(role => `
+      <button class="role-option" data-role-id="${role.id}">
+        <span class="role-option-title">${this.escapeHtml(role.title)}</span>
+        <span class="role-option-desc">${this.escapeHtml(role.desc)}</span>
+      </button>
+    `).join('');
+
     this.container.innerHTML = `
       <div class="chat-container">
         <div class="chat-sidebar" id="chat-sidebar">
@@ -37,59 +82,23 @@ export class ChatPage {
             <span class="toggle-icon">◀</span>
           </button>
           <div class="chat-header-bar">
-            <div class="chat-title">智能对话</div>
-            <button class="chat-settings-btn" id="chat-settings-btn" title="对话设置">⚙️</button>
-          </div>
-          
-          <div class="chat-settings-panel" id="chat-settings-panel" style="display: none;">
-            <div class="settings-section">
-              <label class="setting-label">
-                <span>模型选择</span>
+            <div class="chat-title-block">
+              <div class="chat-session-meta">
+                <span class="info-label">会话进度</span>
+                <span class="info-value" id="chat-session-stats">0 条记录</span>
+              </div>
+            </div>
+            <div class="chat-header-controls">
+              <div class="model-select-group">
+                <label for="model-select">当前模型</label>
                 <select class="setting-select" id="model-select">
-                  <option value="gpt-4">GPT-4</option>
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                  <option value="deepseek-chat">DeepSeek Chat</option>
+                  ${this.getModelOptionsHtml()}
                 </select>
-              </label>
-            </div>
-            
-            <div class="settings-section">
-              <label class="setting-label">
-                <span>温度 (Temperature)</span>
-                <div class="slider-container">
-                  <input type="range" class="setting-slider" id="temperature-slider" min="0" max="2" step="0.1" value="0.7">
-                  <span class="slider-value" id="temperature-value">0.7</span>
-                </div>
-              </label>
-            </div>
-            
-            <div class="settings-section">
-              <label class="setting-label">
-                <span>上下文长度</span>
-                <div class="slider-container">
-                  <input type="range" class="setting-slider" id="context-slider" min="1" max="20" step="1" value="10">
-                  <span class="slider-value" id="context-value">10</span>
-                </div>
-              </label>
-            </div>
-            
-            <div class="settings-section">
-              <label class="setting-checkbox">
-                <input type="checkbox" id="enable-web">
-                <span>🌐 启用联网搜索</span>
-              </label>
-              <label class="setting-checkbox">
-                <input type="checkbox" id="enable-memory" checked>
-                <span>🧠 启用上下文记忆</span>
-              </label>
-              <label class="setting-checkbox">
-                <input type="checkbox" id="enable-stream" checked>
-                <span>⚡ 启用流式响应</span>
-              </label>
+              </div>
+              <button class="chat-info-action" id="clear-session-btn" title="清空当前会话">🧹 清空对话</button>
             </div>
           </div>
-          
+
           <div class="chat-messages" id="chat-messages">
             <div class="message assistant">
               <strong>AI助手</strong><br>
@@ -98,12 +107,73 @@ export class ChatPage {
           </div>
           
           <div class="chat-input-container">
-            <div class="chat-attachments" id="chat-attachments"></div>
-            <div class="chat-input-wrapper">
-              <button class="attach-btn" id="attach-btn" title="添加附件">📎</button>
-              <textarea class="chat-input" id="chat-input" placeholder="输入你的问题... (Shift+Enter换行)" rows="3"></textarea>
-              <button class="send-btn" id="send-btn">发送</button>
+            <div class="chat-input-toolbar">
+              <div class="role-selector">
+                <button class="chat-toolbar-btn role-toggle" id="role-dropdown-toggle">
+                  <span id="role-dropdown-label">${this.escapeHtml(this.roleModes[0].title)}</span>
+                  <span class="role-caret">▾</span>
+                </button>
+                <div class="role-dropdown" id="role-dropdown">
+                  ${roleOptionsHtml}
+                </div>
+              </div>
+              <button class="chat-toolbar-btn" id="toggle-input-settings" title="显示/隐藏对话参数">调参</button>
             </div>
+            <div class="chat-input-settings collapsed" id="chat-input-settings">
+              <div class="input-setting">
+                <label class="setting-label">
+                  <span>温度 (Temperature)</span>
+                  <div class="slider-container">
+                    <input type="range" class="setting-slider" id="temperature-slider" min="0" max="2" step="0.1" value="0.7">
+                    <span class="slider-value" id="temperature-value">0.7</span>
+                  </div>
+                </label>
+              </div>
+              <div class="input-setting">
+                <label class="setting-label">
+                  <span>上下文长度</span>
+                  <div class="slider-container">
+                    <input type="range" class="setting-slider" id="context-slider" min="1" max="20" step="1" value="10">
+                    <span class="slider-value" id="context-value">10</span>
+                  </div>
+                </label>
+              </div>
+              <div class="input-setting toggles">
+                <label class="setting-checkbox">
+                  <input type="checkbox" id="enable-web">
+                  <span>🌐 启用联网搜索</span>
+                </label>
+                <label class="setting-checkbox">
+                  <input type="checkbox" id="enable-memory" checked>
+                  <span>🧠 启用上下文记忆</span>
+                </label>
+                <label class="setting-checkbox">
+                  <input type="checkbox" id="enable-stream" checked>
+                  <span>⚡ 启用流式响应</span>
+                </label>
+              </div>
+            </div>
+            <div class="chat-input-bar">
+              <div class="chat-input-shell">
+                <textarea class="chat-input" id="chat-input" placeholder="输入你的问题... (输入 claude + 内容 可走 Claude CLI，Shift+Enter换行)" rows="3"></textarea>
+                <div class="chat-input-actions">
+                  <button class="chat-icon-btn" id="attach-btn" title="添加附件">📎</button>
+                  <button class="chat-icon-btn" title="新建对话">＋</button>
+                  <button class="chat-icon-btn" title="插入链接">🔗</button>
+                  <button class="chat-icon-btn" title="引用消息">@</button>
+                  <button class="chat-icon-btn" title="上传图片">🖼️</button>
+                  <button class="chat-icon-btn" title="快速命令">⚡</button>
+                  <button class="chat-icon-btn" title="更多功能">⋯</button>
+                </div>
+              </div>
+              <div class="chat-send-controls">
+                <button class="chat-stop-btn" id="stop-btn" style="display: none;">停止</button>
+                <button class="chat-send-fab" id="send-btn" title="发送">
+                  <span class="send-icon">↑</span>
+                </button>
+              </div>
+            </div>
+            <div class="chat-attachments" id="chat-attachments"></div>
           </div>
         </div>
       </div>
@@ -114,26 +184,26 @@ export class ChatPage {
     const sendBtn = document.getElementById('send-btn');
     const chatInput = document.getElementById('chat-input');
     const newSessionBtn = document.getElementById('new-session-btn');
-    const settingsBtn = document.getElementById('chat-settings-btn');
     const attachBtn = document.getElementById('attach-btn');
     const temperatureSlider = document.getElementById('temperature-slider');
     const contextSlider = document.getElementById('context-slider');
     const sidebarToggle = document.getElementById('chat-sidebar-toggle');
+    const modelSelect = document.getElementById('model-select');
+    const clearSessionBtn = document.getElementById('clear-session-btn');
+    const toggleInputSettingsBtn = document.getElementById('toggle-input-settings');
+    const inputSettingsPanel = document.getElementById('chat-input-settings');
+    const roleDropdownToggle = document.getElementById('role-dropdown-toggle');
+    const roleDropdown = document.getElementById('role-dropdown');
+    const stopBtn = document.getElementById('stop-btn');
 
     sendBtn?.addEventListener('click', () => this.sendMessage());
     newSessionBtn?.addEventListener('click', () => this.createNewSession());
+    clearSessionBtn?.addEventListener('click', () => this.clearCurrentSession());
+    stopBtn?.addEventListener('click', () => this.requestStopGeneration());
     
     // 对话列表折叠功能
     sidebarToggle?.addEventListener('click', () => {
       this.toggleSidebar();
-    });
-    
-    // 设置面板切换
-    settingsBtn?.addEventListener('click', () => {
-      const panel = document.getElementById('chat-settings-panel');
-      if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-      }
     });
     
     // 温度滑块
@@ -153,7 +223,7 @@ export class ChatPage {
         valueDisplay.textContent = value;
       }
     });
-    
+
     // 附件上传
     attachBtn?.addEventListener('click', () => this.handleAttachment());
     
@@ -163,12 +233,46 @@ export class ChatPage {
         this.sendMessage();
       }
     });
+
+    chatInput?.addEventListener('input', () => this.updateModeIndicator());
+    chatInput?.addEventListener('paste', (e) => this.handlePaste(e));
+    modelSelect?.addEventListener('change', () => {
+      this.selectedModelValue = modelSelect.value;
+      this.updateModeIndicator();
+    });
+
+    toggleInputSettingsBtn?.addEventListener('click', () => {
+      if (!inputSettingsPanel) return;
+      inputSettingsPanel.classList.toggle('collapsed');
+      toggleInputSettingsBtn.textContent = inputSettingsPanel.classList.contains('collapsed') ? '调参' : '收起';
+    });
+
+    roleDropdownToggle?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      roleDropdown?.classList.toggle('open');
+    });
+
+    roleDropdown?.querySelectorAll('.role-option').forEach(option => {
+      option.addEventListener('click', () => {
+        this.selectRole(option.dataset.roleId);
+        roleDropdown?.classList.remove('open');
+      });
+    });
+    roleDropdown?.addEventListener('click', (event) => event.stopPropagation());
+
+    document.addEventListener('click', () => {
+      roleDropdown?.classList.remove('open');
+    });
+
+    this.updateRoleUI();
+    this.updateModeIndicator();
   }
 
   toggleSidebar() {
     const sidebar = document.getElementById('chat-sidebar');
     const toggleBtn = document.getElementById('chat-sidebar-toggle');
     const toggleIcon = toggleBtn?.querySelector('.toggle-icon');
+    const chatContainer = this.container.querySelector('.chat-container');
     
     if (sidebar) {
       sidebar.classList.toggle('collapsed');
@@ -177,6 +281,9 @@ export class ChatPage {
       // 更新按钮图标
       if (toggleIcon) {
         toggleIcon.textContent = isCollapsed ? '▶' : '◀';
+      }
+      if (chatContainer) {
+        chatContainer.classList.toggle('sidebar-collapsed', isCollapsed);
       }
       
       // 保存状态到localStorage
@@ -190,14 +297,122 @@ export class ChatPage {
       const sidebar = document.getElementById('chat-sidebar');
       const toggleBtn = document.getElementById('chat-sidebar-toggle');
       const toggleIcon = toggleBtn?.querySelector('.toggle-icon');
-      
+      const chatContainer = this.container.querySelector('.chat-container');
+
       if (sidebar) {
         sidebar.classList.add('collapsed');
       }
       if (toggleIcon) {
         toggleIcon.textContent = '▶';
       }
+      if (chatContainer) {
+        chatContainer.classList.add('sidebar-collapsed');
+      }
     }
+  }
+
+  updateModeIndicator() {
+    const label = document.getElementById('chat-mode-label');
+    if (!label) return;
+    const input = document.getElementById('chat-input');
+    const modelSelect = document.getElementById('model-select');
+    const value = input?.value.trim() || '';
+
+    if (value.startsWith('claude ')) {
+      label.textContent = 'Claude CLI 模式';
+      label.dataset.mode = 'cli';
+    } else {
+      const model = modelSelect?.value || 'gpt-4';
+      label.textContent = `云端模型：${model}`;
+      label.dataset.mode = 'cloud';
+    }
+  }
+
+  selectRole(roleId) {
+    const index = this.roleModes.findIndex(role => role.id === roleId);
+    if (index === -1) return;
+    this.currentRoleIndex = index;
+    this.updateRoleUI();
+  }
+
+  updateRoleUI() {
+    const role = this.roleModes[this.currentRoleIndex];
+    const label = document.getElementById('role-dropdown-label');
+    const chatInput = document.getElementById('chat-input');
+    if (label && role) {
+      label.textContent = role.title;
+    }
+    if (chatInput && role) {
+      chatInput.placeholder = `【${role.title}】输入你的问题... (输入 claude + 内容 可走 Claude CLI，Shift+Enter换行)`;
+    }
+  }
+
+  beginGeneration() {
+    this.isGenerating = true;
+    this.stopRequested = false;
+    const sendBtn = document.getElementById('send-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.classList.add('sending');
+    }
+    if (stopBtn) {
+      stopBtn.style.display = 'inline-flex';
+      stopBtn.disabled = false;
+      stopBtn.textContent = '停止';
+    }
+  }
+
+  endGeneration() {
+    const sendBtn = document.getElementById('send-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    this.isGenerating = false;
+    this.stopRequested = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.classList.remove('sending');
+    }
+    if (stopBtn) {
+      stopBtn.style.display = 'none';
+      stopBtn.disabled = false;
+      stopBtn.textContent = '停止';
+    }
+  }
+
+  requestStopGeneration() {
+    if (!this.isGenerating) return;
+    this.stopRequested = true;
+    const stopBtn = document.getElementById('stop-btn');
+    if (stopBtn) {
+      stopBtn.disabled = true;
+      stopBtn.textContent = '停止中...';
+    }
+  }
+
+
+  updateSessionStats() {
+    const statsEl = document.getElementById('chat-session-stats');
+    if (!statsEl) return;
+    if (!this.currentSessionId) {
+      statsEl.textContent = '0 条记录';
+      return;
+    }
+    const session = this.sessionManager.getSession(this.currentSessionId);
+    const count = session?.messages?.length || 0;
+    statsEl.textContent = `${count} 条记录`;
+  }
+
+  clearCurrentSession() {
+    if (!this.currentSessionId) {
+      this.showToast('暂无可清空的会话', 'error');
+      return;
+    }
+
+    if (!confirm('确定要清空当前会话的所有消息吗？')) return;
+
+    this.sessionManager.clearSessionMessages(this.currentSessionId);
+    this.loadSession(this.currentSessionId);
+    this.showToast('当前会话已清空', 'success');
   }
 
   async sendMessage() {
@@ -205,6 +420,16 @@ export class ChatPage {
     const message = input.value.trim();
     
     if (!message) return;
+
+    if (message.startsWith('claude ')) {
+      const cliPrompt = message
+        .slice('claude '.length)
+        .trim()
+        .replace(/^"|"$/g, '');
+
+      await this.handleClaudeCliMessage(message, cliPrompt, input);
+      return;
+    }
     
     if (!this.aiClient) {
       this.showMessage('assistant', '⚠️ 请先在"API配置"页面设置API密钥');
@@ -222,11 +447,8 @@ export class ChatPage {
     
     // 清空输入框并禁用发送按钮
     input.value = '';
-    const sendBtn = document.getElementById('send-btn');
-    if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.textContent = '发送中...';
-    }
+    this.updateModeIndicator();
+    this.beginGeneration();
     
     // 显示用户消息（包含附件信息）
     let displayMessage = message;
@@ -248,6 +470,7 @@ export class ChatPage {
       attachments: attachments.map(f => ({ name: f.name, size: f.size, type: f.type }))
     };
     this.sessionManager.addMessage(this.currentSessionId, userMessage);
+    this.updateSessionStats();
     
     // 自动生成标题（如果是第一条消息）
     const session = this.sessionManager.getSession(this.currentSessionId);
@@ -258,17 +481,20 @@ export class ChatPage {
     
     try {
       // 根据设置决定使用的上下文长度
-      const contextMessages = settings.enableMemory 
+      const baseMessages = settings.enableMemory 
         ? session.messages.slice(-settings.contextLength * 2) 
         : session.messages.slice(-2);
+      const finalMessages = this.prependRoleInstruction(baseMessages);
       
       // 创建助手消息容器
       const assistantMsg = this.showMessage('assistant', '');
+      this.activeAssistantMessage = assistantMsg;
       let fullResponse = '';
       
       // 根据设置使用流式或非流式响应
       if (settings.enableStream) {
-        await this.aiClient.sendMessage(contextMessages, (chunk) => {
+        await this.aiClient.sendMessage(finalMessages, (chunk) => {
+          if (this.stopRequested) return;
           fullResponse += chunk;
           const contentDiv = assistantMsg.querySelector('.message-content');
           if (contentDiv) {
@@ -280,9 +506,15 @@ export class ChatPage {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
           }
         });
+        if (this.stopRequested) {
+          throw new Error('响应已停止');
+        }
       } else {
         // 非流式响应（如果AI客户端支持）
-        fullResponse = await this.aiClient.sendMessageSync?.(contextMessages) || '';
+        fullResponse = await this.aiClient.sendMessageSync?.(finalMessages) || '';
+        if (this.stopRequested) {
+          throw new Error('响应已停止');
+        }
         const contentDiv = assistantMsg.querySelector('.message-content');
         if (contentDiv) {
           contentDiv.innerHTML = this.formatMessage(fullResponse);
@@ -292,19 +524,66 @@ export class ChatPage {
       // 添加到会话
       const assistantMessage = { role: 'assistant', content: fullResponse };
       this.sessionManager.addMessage(this.currentSessionId, assistantMessage);
+      this.updateSessionStats();
       
       // 更新会话列表时间
       this.renderSessionList();
       
     } catch (error) {
       console.error('发送消息失败:', error);
-      this.showMessage('assistant', `❌ 错误: ${error.message}`);
-    } finally {
-      // 恢复发送按钮
-      if (sendBtn) {
-        sendBtn.disabled = false;
-        sendBtn.textContent = '发送';
+      const contentDiv = assistantMsg.querySelector('.message-content');
+      const stoppedByUser = error.message === '响应已停止';
+      const errorText = stoppedByUser ? '⚠️ 输出已停止' : `❌ 错误: ${error.message}`;
+      if (contentDiv) {
+        contentDiv.innerHTML = this.formatMessage(errorText);
       }
+      this.sessionManager.addMessage(this.currentSessionId, { role: 'assistant', content: errorText });
+      this.updateSessionStats();
+    } finally {
+      this.endGeneration();
+    }
+  }
+
+  /**
+   * 通过本地 Claude CLI 处理消息
+   */
+  async handleClaudeCliMessage(rawMessage, cliPrompt, inputEl) {
+    this.showMessage('user', rawMessage);
+
+    if (inputEl) {
+      inputEl.value = '';
+      this.updateModeIndicator();
+    }
+    this.beginGeneration();
+
+    if (!window.electronAPI || typeof window.electronAPI.runClaude !== 'function') {
+      this.showMessage('assistant', '❌ 当前应用未启用 Claude CLI 集成');
+      this.endGeneration();
+      return;
+    }
+
+    const assistantMsg = this.showMessage('assistant', '⏳ 正在通过 Claude CLI 处理...');
+    this.activeAssistantMessage = assistantMsg;
+
+    try {
+      const result = await window.electronAPI.runClaude(cliPrompt);
+      if (this.stopRequested) {
+        throw new Error('响应已停止');
+      }
+      const contentDiv = assistantMsg.querySelector('.message-content');
+      if (contentDiv) {
+        contentDiv.innerHTML = this.formatMessage(result || '(Claude CLI 未返回内容)');
+      }
+    } catch (error) {
+      console.error('Claude CLI 调用失败:', error);
+      const contentDiv = assistantMsg.querySelector('.message-content');
+      const stoppedByUser = error.message === '响应已停止';
+      const text = stoppedByUser ? '⚠️ 输出已停止' : `❌ Claude CLI 调用失败: ${error.message}`;
+      if (contentDiv) {
+        contentDiv.innerHTML = this.formatMessage(text);
+      }
+    } finally {
+      this.endGeneration();
     }
   }
 
@@ -320,6 +599,16 @@ export class ChatPage {
     };
     
     input.click();
+  }
+
+  handlePaste(event) {
+    if (!event.clipboardData || !event.clipboardData.files?.length) return;
+    const files = Array.from(event.clipboardData.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    event.preventDefault();
+    imageFiles.forEach(file => this.addAttachment(file));
   }
 
   addAttachment(file) {
@@ -383,6 +672,14 @@ export class ChatPage {
       enableMemory: document.getElementById('enable-memory')?.checked || false,
       enableStream: document.getElementById('enable-stream')?.checked || true,
     };
+  }
+
+  prependRoleInstruction(messages) {
+    const role = this.roleModes[this.currentRoleIndex];
+    if (role?.prompt) {
+      return [{ role: 'system', content: role.prompt }, ...messages];
+    }
+    return messages;
   }
 
   getAttachments() {
@@ -562,6 +859,7 @@ export class ChatPage {
     
     // 更新会话列表高亮
     this.renderSessionList();
+    this.updateSessionStats();
   }
 
   createNewSession() {
@@ -633,6 +931,8 @@ export class ChatPage {
     } else {
       this.renderSessionList();
     }
+    
+    this.updateSessionStats();
   }
 
   formatTime(date) {
@@ -658,6 +958,7 @@ export class ChatPage {
   }
 
   destroy() {
+    window.removeEventListener('availableModelsUpdated', this.handleAvailableModelsUpdate);
     // 清理事件监听器等
     const sendBtn = document.getElementById('send-btn');
     const chatInput = document.getElementById('chat-input');
@@ -667,6 +968,45 @@ export class ChatPage {
     }
     if (chatInput) {
       chatInput.replaceWith(chatInput.cloneNode(true));
+    }
+  }
+
+  getDefaultModelOptions() {
+    return [
+      { value: 'gpt-4o', label: 'GPT-4o' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+      { value: 'deepseek-chat', label: 'DeepSeek Chat' }
+    ];
+  }
+
+  getAvailableModelsFromStorage() {
+    const config = this.configManager?.getCurrentConfig();
+    if (!config) return [];
+    const models = config.models?.length ? config.models : (config.model ? [config.model] : []);
+    if (models.length > 0) {
+      this.selectedModelValue = config.model || models[0];
+    }
+    return models.map(value => ({ value, label: value }));
+  }
+
+  getModelOptionsHtml() {
+    const options = this.availableModels.length ? this.availableModels : this.getDefaultModelOptions();
+    if (!this.selectedModelValue && options.length) {
+      this.selectedModelValue = options[0].value;
+    }
+    return options.map(opt => `
+      <option value="${opt.value}" ${this.selectedModelValue === opt.value ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>
+    `).join('');
+  }
+
+  updateModelSelect() {
+    const modelSelect = document.getElementById('model-select');
+    if (!modelSelect) return;
+    const optionsHtml = this.getModelOptionsHtml();
+    modelSelect.innerHTML = optionsHtml;
+    if (this.selectedModelValue) {
+      modelSelect.value = this.selectedModelValue;
     }
   }
 }

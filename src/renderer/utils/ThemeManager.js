@@ -17,7 +17,11 @@ export class ThemeManager {
           '--warning': '#f59e0b',
           '--error': '#ef4444',
           '--bg-main': 'rgba(255, 255, 255, 0.95)',
-          '--bg-gradient': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+          '--bg-gradient': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          '--chat-input-bg': '#ffffff',
+          '--chat-input-border': '#e2e8f0',
+          '--chat-input-text': '#1e293b',
+          '--chat-input-accent': '#64748b'
         }
       },
       dark: {
@@ -33,7 +37,11 @@ export class ThemeManager {
           '--warning': '#fbbf24',
           '--error': '#f87171',
           '--bg-main': 'rgba(15, 23, 42, 0.95)',
-          '--bg-gradient': 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)'
+          '--bg-gradient': 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+          '--chat-input-bg': '#0f172a',
+          '--chat-input-border': '#1f2937',
+          '--chat-input-text': '#f8fafc',
+          '--chat-input-accent': 'rgba(248, 250, 252, 0.6)'
         }
       },
       blue: {
@@ -49,7 +57,11 @@ export class ThemeManager {
           '--warning': '#f59e0b',
           '--error': '#ef4444',
           '--bg-main': 'rgba(255, 255, 255, 0.95)',
-          '--bg-gradient': 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)'
+          '--bg-gradient': 'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)',
+          '--chat-input-bg': '#f0f9ff',
+          '--chat-input-border': '#bae6fd',
+          '--chat-input-text': '#0c4a6e',
+          '--chat-input-accent': '#0ea5e9'
         }
       },
       purple: {
@@ -65,7 +77,11 @@ export class ThemeManager {
           '--warning': '#f59e0b',
           '--error': '#ef4444',
           '--bg-main': 'rgba(255, 255, 255, 0.95)',
-          '--bg-gradient': 'linear-gradient(135deg, #a855f7 0%, #c026d3 100%)'
+          '--bg-gradient': 'linear-gradient(135deg, #a855f7 0%, #c026d3 100%)',
+          '--chat-input-bg': '#faf5ff',
+          '--chat-input-border': '#e9d5ff',
+          '--chat-input-text': '#581c87',
+          '--chat-input-accent': '#a855f7'
         }
       },
       green: {
@@ -81,7 +97,11 @@ export class ThemeManager {
           '--warning': '#f59e0b',
           '--error': '#ef4444',
           '--bg-main': 'rgba(255, 255, 255, 0.95)',
-          '--bg-gradient': 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)'
+          '--bg-gradient': 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)',
+          '--chat-input-bg': '#f0fdf4',
+          '--chat-input-border': '#bbf7d0',
+          '--chat-input-text': '#064e3b',
+          '--chat-input-accent': '#10b981'
         }
       }
     };

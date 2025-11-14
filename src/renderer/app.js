@@ -115,6 +115,7 @@ class AIApp {
     this.updateManager = new UpdateManager();
     this.aiClient = null;
     this.pageManager = null;
+    this.availableModels = [];
     
     this.init();
   }
@@ -122,15 +123,21 @@ class AIApp {
   init() {
     // 初始化主题
     this.themeManager.init();
+    this.initThemeSelector();
+    this.updateApiStatus(false, '等待测试');
+    window.addEventListener('apiConnectionStatus', (event) => {
+      const ready = !!event.detail?.ready;
+      const message = event.detail?.message;
+      const status = event.detail?.status;
+      this.updateApiStatus(ready, message, status);
+    });
     
     // 初始化更新检查
     this.updateManager.init();
     
     // 初始化AI客户端
     this.updateAIClient();
-    
-    // 绑定主题切换按钮
-    this.bindThemeToggle();
+    this.verifyStoredConfigs();
     
     // 绑定侧边栏折叠功能
     this.bindSidebarToggle();
@@ -169,13 +176,114 @@ class AIApp {
     });
   }
   
-  bindThemeToggle() {
-    const themeBtn = document.getElementById('theme-toggle');
-    if (themeBtn) {
-      themeBtn.addEventListener('click', () => {
-        this.themeManager.toggleTheme();
-      });
+  initThemeSelector() {
+    const themeSelect = document.getElementById('theme-select');
+    const themeNav = document.getElementById('theme-nav');
+    const themePanel = document.getElementById('theme-panel');
+    if (!themeSelect) return;
+    
+    const themes = this.themeManager.getAllThemes();
+    themeSelect.innerHTML = themes.map(theme => `
+      <option value="${theme.id}">${theme.name}</option>
+    `).join('');
+    themeSelect.value = this.themeManager.getCurrentTheme();
+    
+    themeSelect.addEventListener('change', (e) => {
+      this.themeManager.applyTheme(e.target.value);
+    });
+    
+    themeNav?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      themePanel?.classList.toggle('open');
+    });
+    
+    document.addEventListener('click', (e) => {
+      if (!themePanel || !themePanel.classList.contains('open')) return;
+      if (themePanel.contains(e.target) || themeNav?.contains(e.target)) return;
+      themePanel.classList.remove('open');
+    });
+    
+    window.addEventListener('themeChanged', (event) => {
+      if (event.detail?.theme && themeSelect.value !== event.detail.theme) {
+        themeSelect.value = event.detail.theme;
+      }
+    });
+
+    document.getElementById('api-status-refresh')?.addEventListener('click', () => {
+      this.verifyStoredConfigs(true);
+    });
+  }
+  
+  updateApiStatus(ready, message, status = 'waiting') {
+    const statusDot = document.querySelector('.api-status .status-dot');
+    const statusText = document.getElementById('api-status-text');
+    if (!statusDot || !statusText) return;
+    statusDot.classList.remove('ready', 'waiting', 'error');
+    if (ready) {
+      statusDot.classList.add('ready');
+    } else if (status === 'error') {
+      statusDot.classList.add('error');
+    } else {
+      statusDot.classList.add('waiting');
     }
+      statusText.textContent = message || (ready ? 'API连接已就绪' : status === 'error' ? '连接失败' : '等待测试');
+  }
+
+  async verifyStoredConfigs(showSpinner = false) {
+    const refreshBtn = document.getElementById('api-status-refresh');
+    if (showSpinner && refreshBtn) refreshBtn.classList.add('spinning');
+    const configs = this.configManager.loadConfigs();
+    if (!configs.length) {
+      this.updateApiStatus(false, '未配置密钥', 'waiting');
+      if (refreshBtn) refreshBtn.classList.remove('spinning');
+      return;
+    }
+    this.updateApiStatus(false, '检测中...', 'waiting');
+    for (const config of configs) {
+      const result = await this.testConfigAvailability(config);
+      if (result?.success) {
+        this.availableModels = result.models || [];
+        this.updateApiStatus(true, `${config.provider || 'API'} 已就绪`, 'ready');
+        localStorage.setItem('ai-toolbox-available-models', JSON.stringify(this.availableModels));
+        window.dispatchEvent(new CustomEvent('availableModelsUpdated', {
+          detail: { models: this.availableModels }
+        }));
+        if (refreshBtn) refreshBtn.classList.remove('spinning');
+        return;
+      }
+    }
+    this.updateApiStatus(false, '无可用配置', 'error');
+    if (refreshBtn) refreshBtn.classList.remove('spinning');
+  }
+
+  async testConfigAvailability(config) {
+    const baseURL = (config.baseURL || '').replace(/\/$/, '');
+    const endpoint = config.endpoint || '/chat/completions';
+    if (!config.apiKey || !baseURL) return null;
+    const models = config.models?.length ? config.models : (config.model ? [config.model] : []);
+    if (!models.length) return null;
+    const testModel = models[0];
+    const url = `${baseURL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+          model: testModel,
+          messages: [{ role: 'user', content: 'health check' }],
+          max_tokens: 5
+        })
+      });
+      if (response.ok) {
+        return { success: true, models };
+      }
+    } catch (error) {
+      console.warn('配置检测失败:', error);
+    }
+    return null;
   }
   
   bindSidebarToggle() {

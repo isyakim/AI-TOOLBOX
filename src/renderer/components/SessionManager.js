@@ -83,6 +83,13 @@ export class SessionManager {
     }
   }
 
+  // 清空指定会话的消息
+  clearSessionMessages(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) return;
+    this.updateSession(sessionId, { messages: [] });
+  }
+
   // 获取当前会话ID
   getCurrentSessionId() {
     return localStorage.getItem(this.currentSessionKey);
