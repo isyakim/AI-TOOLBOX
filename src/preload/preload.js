@@ -7,5 +7,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     runClaude(prompt) {
         return ipcRenderer.invoke('claude-run', { prompt });
+    },
+
+    fileAction(payload) {
+        return ipcRenderer.invoke('file-action', payload);
     }
 });

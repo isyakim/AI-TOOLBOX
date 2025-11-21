@@ -1,6 +1,7 @@
 
 // 智能对话页面组件
 import { SessionManager } from '../SessionManager.js';
+import { getFileAccessSettings, addFileActionLog } from '../../utils/fileAccess.js';
 
 export class ChatPage {
   constructor(container, aiClient, configManager) {
@@ -8,6 +9,7 @@ export class ChatPage {
     this.aiClient = aiClient;
     this.configManager = configManager;
     this.sessionManager = new SessionManager();
+    this.contentWrapper = this.container.closest('.content-area');
     this.currentSessionId = null;
     this.roleModes = [
       {
@@ -40,17 +42,32 @@ export class ChatPage {
     this.stopRequested = false;
     this.activeAssistantMessage = null;
     this.availableModels = this.getAvailableModelsFromStorage();
-    this.selectedModelValue = this.availableModels[0]?.value || this.getDefaultModelOptions()[0].value;
+    this.fileAccess = getFileAccessSettings();
+    const defaults = this.getDefaultModelOptions();
+    this.selectedModelValue = this.availableModels[0]?.value || defaults[0]?.value || 'gpt-4o';
     this.handleAvailableModelsUpdate = (event) => {
       const models = event.detail?.models || [];
       this.availableModels = models.map(m => ({ value: m, label: m }));
+      if (!this.availableModels.length) {
+        this.availableModels = this.getDefaultModelOptions();
+      }
+      if (!this.availableModels.find(m => m.value === this.selectedModelValue)) {
+        this.selectedModelValue = this.availableModels[0]?.value || this.selectedModelValue;
+      }
       this.updateModelSelect();
     };
     window.addEventListener('availableModelsUpdated', this.handleAvailableModelsUpdate);
+    this.handleFileAccessUpdate = () => {
+      this.fileAccess = getFileAccessSettings();
+      this.refreshFileAccessSummary();
+    };
+    window.addEventListener('fileAccessUpdated', this.handleFileAccessUpdate);
+    this.sessionKeyword = '';
     this.init();
   }
 
   init() {
+    this.contentWrapper?.classList.add('chat-layout');
     this.render();
     this.bindEvents();
     this.loadOrCreateSession();
@@ -58,126 +75,210 @@ export class ChatPage {
   }
 
   render() {
-    const roleOptionsHtml = this.roleModes.map(role => `
+    this.fileAccess = getFileAccessSettings();
+    const roleOptionsHtml = this.getRoleOptionsHtml();
+    this.container.innerHTML = `
+      <div class="chat-shell chat-container">
+        ${this.getSidebarTemplate(roleOptionsHtml)}
+        <button class="chat-sidebar-toggle" id="chat-sidebar-toggle" title="折叠/展开侧栏">
+          <span class="toggle-icon">◀</span>
+        </button>
+        <section class="chat-main">
+          <div class="chat-surface glass-panel">
+            ${this.getMessagesTemplate()}
+            ${this.getComposerTemplate()}
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  getRoleOptionsHtml() {
+    return this.roleModes.map(role => `
       <button class="role-option" data-role-id="${role.id}">
         <span class="role-option-title">${this.escapeHtml(role.title)}</span>
         <span class="role-option-desc">${this.escapeHtml(role.desc)}</span>
       </button>
     `).join('');
+  }
 
-    this.container.innerHTML = `
-      <div class="chat-container">
-        <div class="chat-sidebar" id="chat-sidebar">
-          <div class="session-header">
-            <button class="btn btn-primary btn-new-session" id="new-session-btn">
-              ➕ 新对话
-            </button>
-          </div>
-          <div class="session-list" id="session-list">
-            <!-- 会话列表将在这里动态生成 -->
-          </div>
-        </div>
-        <div class="chat-main">
-          <button class="chat-sidebar-toggle" id="chat-sidebar-toggle" title="显示/隐藏对话列表">
-            <span class="toggle-icon">◀</span>
+  getSidebarTemplate(roleOptionsHtml) {
+    return `
+      <aside class="chat-sidebar glass-panel" id="chat-sidebar">
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="sessions">
+            <span>🗂 会话</span>
           </button>
-          <div class="chat-header-bar">
-            <div class="chat-title-block">
-              <div class="chat-session-meta">
-                <span class="info-label">会话进度</span>
-                <span class="info-value" id="chat-session-stats">0 条记录</span>
-              </div>
+          <button class="sidebar-tab" data-tab="overview">
+            <span>📊 概览</span>
+          </button>
+        </div>
+        <div class="sidebar-panel active" data-tab-panel="sessions">
+          <div class="sidebar-head">
+            <div>
+              <p class="sidebar-eyebrow">会话集</p>
+              <h3>全部对话</h3>
             </div>
-            <div class="chat-header-controls">
-              <div class="model-select-group">
-                <label for="model-select">当前模型</label>
-                <select class="setting-select" id="model-select">
-                  ${this.getModelOptionsHtml()}
-                </select>
-              </div>
-              <button class="chat-info-action" id="clear-session-btn" title="清空当前会话">🧹 清空对话</button>
-            </div>
+            <button class="sidebar-add-btn icon-button" id="new-session-btn" title="新建会话">＋</button>
           </div>
+          <div class="sidebar-search">
+            <span class="sidebar-search-icon">🔍</span>
+            <input type="text" id="session-search" placeholder="搜索会话或关键字">
+          </div>
+          <div class="session-list" id="session-list"></div>
+        </div>
+        <div class="sidebar-panel" data-tab-panel="overview">
+          ${this.getTopPanelTemplate(roleOptionsHtml)}
+        </div>
+      </aside>
+    `;
+  }
 
-          <div class="chat-messages" id="chat-messages">
-            <div class="message assistant">
-              <strong>AI助手</strong><br>
-              你好！我是你的AI助手，可以帮你解答问题、编写代码、翻译文本等。
+  getTopPanelTemplate(roleOptionsHtml) {
+    const currentRole = this.roleModes[this.currentRoleIndex] || this.roleModes[0];
+    return `
+      <div class="chat-top-panel glass-panel">
+        <div class="chat-info-grid">
+          <div class="info-card info-card-stats">
+            <div class="info-label">会话概览</div>
+            <div class="info-value" id="chat-session-stats">0 条记录</div>
+            <div class="info-hint" id="chat-context-summary">初始化...</div>
+          </div>
+          <div class="info-card info-card-model">
+            <div class="info-label">当前模型</div>
+            <div class="info-inline">
+              <select class="setting-select" id="model-select">
+                ${this.getModelOptionsHtml()}
+              </select>
+              <button class="icon-button" id="clear-session-btn" title="清空当前会话">🧹</button>
             </div>
           </div>
-          
-          <div class="chat-input-container">
-            <div class="chat-input-toolbar">
-              <div class="role-selector">
-                <button class="chat-toolbar-btn role-toggle" id="role-dropdown-toggle">
-                  <span id="role-dropdown-label">${this.escapeHtml(this.roleModes[0].title)}</span>
-                  <span class="role-caret">▾</span>
-                </button>
-                <div class="role-dropdown" id="role-dropdown">
-                  ${roleOptionsHtml}
-                </div>
-              </div>
-              <button class="chat-toolbar-btn" id="toggle-input-settings" title="显示/隐藏对话参数">调参</button>
-            </div>
-            <div class="chat-input-settings collapsed" id="chat-input-settings">
-              <div class="input-setting">
-                <label class="setting-label">
-                  <span>温度 (Temperature)</span>
-                  <div class="slider-container">
-                    <input type="range" class="setting-slider" id="temperature-slider" min="0" max="2" step="0.1" value="0.7">
-                    <span class="slider-value" id="temperature-value">0.7</span>
-                  </div>
-                </label>
-              </div>
-              <div class="input-setting">
-                <label class="setting-label">
-                  <span>上下文长度</span>
-                  <div class="slider-container">
-                    <input type="range" class="setting-slider" id="context-slider" min="1" max="20" step="1" value="10">
-                    <span class="slider-value" id="context-value">10</span>
-                  </div>
-                </label>
-              </div>
-              <div class="input-setting toggles">
-                <label class="setting-checkbox">
-                  <input type="checkbox" id="enable-web">
-                  <span>🌐 启用联网搜索</span>
-                </label>
-                <label class="setting-checkbox">
-                  <input type="checkbox" id="enable-memory" checked>
-                  <span>🧠 启用上下文记忆</span>
-                </label>
-                <label class="setting-checkbox">
-                  <input type="checkbox" id="enable-stream" checked>
-                  <span>⚡ 启用流式响应</span>
-                </label>
+          <div class="info-card info-card-role">
+            <div class="info-label">角色设定</div>
+            <div class="role-selector">
+              <button class="role-pill" id="role-dropdown-toggle">
+                <span id="role-dropdown-label">${this.escapeHtml(currentRole.title)}</span>
+                <span class="role-caret">▾</span>
+              </button>
+              <div class="role-dropdown" id="role-dropdown">
+                ${roleOptionsHtml}
               </div>
             </div>
-            <div class="chat-input-bar">
-              <div class="chat-input-shell">
-                <textarea class="chat-input" id="chat-input" placeholder="输入你的问题... (输入 claude + 内容 可走 Claude CLI，Shift+Enter换行)" rows="3"></textarea>
-                <div class="chat-input-actions">
-                  <button class="chat-icon-btn" id="attach-btn" title="添加附件">📎</button>
-                  <button class="chat-icon-btn" title="新建对话">＋</button>
-                  <button class="chat-icon-btn" title="插入链接">🔗</button>
-                  <button class="chat-icon-btn" title="引用消息">@</button>
-                  <button class="chat-icon-btn" title="上传图片">🖼️</button>
-                  <button class="chat-icon-btn" title="快速命令">⚡</button>
-                  <button class="chat-icon-btn" title="更多功能">⋯</button>
-                </div>
-              </div>
-              <div class="chat-send-controls">
-                <button class="chat-stop-btn" id="stop-btn" style="display: none;">停止</button>
-                <button class="chat-send-fab" id="send-btn" title="发送">
-                  <span class="send-icon">↑</span>
-                </button>
-              </div>
-            </div>
-            <div class="chat-attachments" id="chat-attachments"></div>
           </div>
+          <div class="info-card info-card-mode">
+            <div class="info-label">对话模式</div>
+            <span class="context-badge" id="chat-mode-label" data-mode="cloud">云端</span>
+            <div class="info-hint">输入 “claude ...” 可切换 CLI</div>
+          </div>
+          ${this.getFileAccessCard()}
         </div>
       </div>
     `;
+  }
+
+  getFileAccessCard() {
+    const settings = this.fileAccess || getFileAccessSettings();
+    const enabled = !!settings?.enabled;
+    const autoExecute = !!settings?.autoExecute;
+    const directories = settings?.directories || [];
+    const scopeText = this.getFileAccessScopeText(directories);
+    return `
+      <div class="info-card info-card-access" id="file-access-card">
+        <div class="info-label">文件权限</div>
+        <div class="access-pill-row">
+          <span class="pill ${enabled ? 'pill-success' : 'pill-muted'}" id="file-access-enabled">
+            ${enabled ? '已启用' : '未开启'}
+          </span>
+          <span class="pill pill-muted" id="file-access-mode">
+            ${autoExecute ? '自动执行' : '手动确认'}
+          </span>
+        </div>
+        <div class="info-hint" id="file-access-scope">${scopeText}</div>
+        <button class="ghost-btn open-access-btn" id="open-access-settings">管理权限</button>
+      </div>
+    `;
+  }
+
+  getMessagesTemplate() {
+    return `<div class="chat-messages" id="chat-messages">${this.getEmptyStateHtml()}</div>`;
+  }
+
+  getComposerTemplate() {
+    return `
+      <div class="chat-composer">
+        <div class="composer-toolbar">
+          <div class="composer-buttons">
+            <button class="icon-btn" id="attach-btn" title="添加附件">📎</button>
+            <button class="icon-btn" id="voice-btn" title="语音输入 (敬请期待)" disabled>🎤</button>
+            <button class="icon-btn" id="prompt-hint-btn" title="AI 建议提示">✨</button>
+          </div>
+          <div class="composer-meta">
+            <span>⌘ + Enter 发送 · Shift + Enter 换行</span>
+            <button class="ghost-btn" id="toggle-input-settings" title="显示/隐藏对话参数">调参</button>
+          </div>
+        </div>
+        <div class="composer-body">
+          <textarea class="chat-input" id="chat-input" rows="3" placeholder="输入你的问题… 支持 claude 指令、代码、产品思路"></textarea>
+          <div class="composer-actions">
+            <button class="chat-stop-btn" id="stop-btn" style="display: none;">暂停</button>
+            <button class="chat-send-btn" id="send-btn" title="发送">
+              <span class="send-icon">⮚</span>
+            </button>
+          </div>
+        </div>
+        <div class="chat-input-settings collapsed" id="chat-input-settings">
+          <div class="input-setting">
+            <label class="setting-label">
+              <span>温度 (Temperature)</span>
+              <div class="slider-container">
+                <input type="range" class="setting-slider" id="temperature-slider" min="0" max="2" step="0.1" value="0.7">
+                <span class="slider-value" id="temperature-value">0.7</span>
+              </div>
+            </label>
+          </div>
+          <div class="input-setting">
+            <label class="setting-label">
+              <span>上下文长度</span>
+              <div class="slider-container">
+                <input type="range" class="setting-slider" id="context-slider" min="1" max="20" step="1" value="10">
+                <span class="slider-value" id="context-value">10</span>
+              </div>
+            </label>
+          </div>
+          <div class="input-setting toggles">
+            <label class="setting-checkbox">
+              <input type="checkbox" id="enable-web">
+              <span>🌐 启用联网搜索</span>
+            </label>
+            <label class="setting-checkbox">
+              <input type="checkbox" id="enable-memory" checked>
+              <span>🧠 启用上下文记忆</span>
+            </label>
+            <label class="setting-checkbox">
+              <input type="checkbox" id="enable-stream" checked>
+              <span>⚡ 启用流式响应</span>
+            </label>
+          </div>
+        </div>
+        <div class="chat-attachments" id="chat-attachments"></div>
+      </div>
+    `;
+  }
+
+  getEmptyStateHtml() {
+    return `
+      <div class="chat-empty-state" id="chat-empty-state">
+        <div class="empty-icon">💬</div>
+        <h3>开始新的讨论</h3>
+        <p>描述你的需求，或直接输入 “claude …” 使用本地 CLI。</p>
+      </div>
+    `;
+  }
+
+  updateEmptyState(hasMessages) {
+    const emptyState = document.getElementById('chat-empty-state');
+    if (!emptyState) return;
+    emptyState.style.display = hasMessages ? 'none' : 'flex';
   }
 
   bindEvents() {
@@ -195,6 +296,10 @@ export class ChatPage {
     const roleDropdownToggle = document.getElementById('role-dropdown-toggle');
     const roleDropdown = document.getElementById('role-dropdown');
     const stopBtn = document.getElementById('stop-btn');
+    const sessionSearch = document.getElementById('session-search');
+    const accessSettingsBtn = document.getElementById('open-access-settings');
+    const sidebarTabs = this.container.querySelectorAll('.sidebar-tab');
+    const sidebarPanels = this.container.querySelectorAll('.sidebar-panel');
 
     sendBtn?.addEventListener('click', () => this.sendMessage());
     newSessionBtn?.addEventListener('click', () => this.createNewSession());
@@ -240,6 +345,21 @@ export class ChatPage {
       this.selectedModelValue = modelSelect.value;
       this.updateModeIndicator();
     });
+    sessionSearch?.addEventListener('input', (e) => {
+      this.sessionKeyword = e.target.value.trim().toLowerCase();
+      this.renderSessionList();
+    });
+    accessSettingsBtn?.addEventListener('click', () => this.openFileAccessSettings());
+    sidebarTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        sidebarTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        sidebarPanels.forEach(panel => {
+          panel.classList.toggle('active', panel.dataset.tabPanel === target);
+        });
+      });
+    });
 
     toggleInputSettingsBtn?.addEventListener('click', () => {
       if (!inputSettingsPanel) return;
@@ -266,6 +386,7 @@ export class ChatPage {
 
     this.updateRoleUI();
     this.updateModeIndicator();
+    this.refreshFileAccessSummary();
   }
 
   toggleSidebar() {
@@ -322,10 +443,41 @@ export class ChatPage {
       label.textContent = 'Claude CLI 模式';
       label.dataset.mode = 'cli';
     } else {
-      const model = modelSelect?.value || 'gpt-4';
-      label.textContent = `云端模型：${model}`;
+      const modelValue = modelSelect?.value || 'gpt-4';
+      const modelLabel = modelSelect?.selectedOptions?.[0]?.textContent || modelValue;
+      label.textContent = `云端：${modelLabel}`;
       label.dataset.mode = 'cloud';
     }
+  }
+
+  refreshFileAccessSummary() {
+    const settings = getFileAccessSettings();
+    this.fileAccess = settings;
+    const enabledEl = document.getElementById('file-access-enabled');
+    const modeEl = document.getElementById('file-access-mode');
+    const scopeEl = document.getElementById('file-access-scope');
+    if (!enabledEl || !modeEl || !scopeEl) return;
+    enabledEl.textContent = settings.enabled ? '已启用' : '未开启';
+    enabledEl.classList.toggle('pill-success', settings.enabled);
+    enabledEl.classList.toggle('pill-muted', !settings.enabled);
+    modeEl.textContent = settings.autoExecute ? '自动执行' : '手动确认';
+    scopeEl.textContent = this.getFileAccessScopeText(settings.directories || []);
+  }
+
+  getFileAccessScopeText(directories) {
+    if (!directories || !directories.length) return '未配置授权范围';
+    if (directories.length === 1) return directories[0];
+    const preview = directories.slice(0, 2).join('、');
+    return directories.length > 2 ? `${preview} 等` : preview;
+  }
+
+  openFileAccessSettings() {
+    const settingsNav = document.querySelector('.nav-item[data-page="settings"]');
+    settingsNav?.click();
+    setTimeout(() => {
+      const filesTab = document.querySelector('.settings-tab[data-tab="files"]');
+      filesTab?.click();
+    }, 200);
   }
 
   selectRole(roleId) {
@@ -347,6 +499,229 @@ export class ChatPage {
     }
   }
 
+  getBaseSystemPrompt() {
+    return [
+      '你正在使用一个具备文件读写能力的桌面 IDE 助理。你拥有名为 file-action 的工具，可以直接读取/修改/删除本地文件、列出目录，无需也禁止要求用户手动粘贴内容。',
+      '只要用户提到“读取/查看/编辑/删除/列出目录”等需求，你必须使用该工具，不得声称“无法访问本地文件”。',
+      '请按照如下格式输出指令：',
+      '```file-action',
+      '{',
+      '  "action": "read|write|delete",',
+      '  "path": "相对于项目根目录的路径（例如 src/app.js）",',
+      '  "content": "当 action 为 write/edit 时必填的新内容"',
+      '}',
+      '```',
+      '若 action=read 且 path 指向目录，则视为列出该目录。',
+      '一次可以包含多个 file-action 代码块。等待工具执行结果后再继续回答。'
+    ].join('\n');
+  }
+
+  extractFileActions(rawText) {
+    if (!rawText) return [];
+    const regex = /```file-action\s*([\s\S]+?)```/gi;
+    const actions = [];
+    let match;
+    while ((match = regex.exec(rawText)) !== null) {
+      try {
+        const payload = JSON.parse(match[1]);
+        if (payload && payload.action && payload.path) {
+          actions.push(payload);
+        }
+      } catch (error) {
+        console.warn('无法解析 file-action：', error);
+      }
+    }
+    return actions;
+  }
+
+  attachFileActions(messageEl, content) {
+    const actions = this.extractFileActions(content);
+    if (!actions.length) return;
+    const panel = document.createElement('div');
+    panel.className = 'file-action-panel';
+    if (this.fileAccess?.showSteps === false) {
+      panel.classList.add('compact');
+    }
+    actions.forEach((action, index) => {
+      const item = document.createElement('div');
+      item.className = 'file-action-item';
+      item.innerHTML = `
+        <div class="file-action-title">文件操作 ${index + 1}</div>
+        <div class="file-action-desc">${this.describeFileAction(action)}</div>
+        <div class="file-action-status" data-status="pending">等待确认</div>
+      `;
+      const btnRow = document.createElement('div');
+      btnRow.className = 'file-action-actions';
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = '执行';
+      confirmBtn.className = 'btn btn-primary';
+      confirmBtn.addEventListener('click', () => this.confirmFileAction(action, item));
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = '忽略';
+      cancelBtn.className = 'btn btn-secondary';
+      cancelBtn.addEventListener('click', () => item.remove());
+      if (this.fileAccess?.autoExecute) {
+        confirmBtn.style.display = 'none';
+        cancelBtn.textContent = '取消';
+        this.executeFileAction(action, item);
+      } else {
+        btnRow.appendChild(confirmBtn);
+        btnRow.appendChild(cancelBtn);
+      }
+      item.appendChild(btnRow);
+      panel.appendChild(item);
+    });
+    const messageContent = messageEl.querySelector('.message-content');
+    if (messageContent) {
+      messageContent.parentElement?.appendChild(panel);
+    } else {
+      messageEl.appendChild(panel);
+    }
+  }
+
+  describeFileAction(action) {
+    const base = `操作：${action.action} | 路径：${action.path}`;
+    if ((action.action === 'write' || action.action === 'edit') && action.content) {
+      return `${base}<br>内容预览：${this.escapeHtml(action.content.slice(0, 120))}${action.content.length > 120 ? '...' : ''}`;
+    }
+    return base;
+  }
+
+  async confirmFileAction(action, container) {
+    if (!this.fileAccess?.autoExecute && !window.confirm(`是否允许 AI 执行 ${action.action} - ${action.path}?`)) {
+      return;
+    }
+    await this.executeFileAction(action, container);
+  }
+
+  async executeFileAction(action, container) {
+    if (!window.electronAPI?.fileAction) {
+      alert('当前环境未暴露文件操作能力。');
+      return;
+    }
+    this.fileAccess = getFileAccessSettings();
+    const fileSettings = this.fileAccess;
+    if (!fileSettings.enabled) {
+      alert('当前未启用 AI 文件操作，请前往设置开启。');
+      return;
+    }
+    if (!this.isPathAllowed(action.path, fileSettings.directories)) {
+      alert(`路径 ${action.path} 未被授权访问。`);
+      return;
+    }
+    const statusEl = container.querySelector('.file-action-status');
+    if (statusEl) {
+      statusEl.textContent = '执行中...';
+      statusEl.dataset.status = 'running';
+    }
+    try {
+      let previousContent = '';
+      if ((action.action === 'write' || action.action === 'edit' || action.action === 'save' || action.action === 'delete') && action.path) {
+        try {
+          const backup = await window.electronAPI.fileAction({ action: 'read', path: action.path });
+          if (backup?.success) {
+            previousContent = backup.content || '';
+          }
+        } catch (error) {
+          console.warn('读取备份失败:', error);
+        }
+      }
+      const result = await window.electronAPI.fileAction(action);
+      if (!result?.success) {
+        throw new Error(result?.message || '未知错误');
+      }
+      if (action.action !== 'read') {
+        addFileActionLog({
+          id: `${Date.now()}-${Math.random()}`,
+          action: action.action,
+          path: action.path,
+          timestamp: new Date().toISOString(),
+          previousContent: previousContent || null,
+          newContent: action.content ?? null,
+          status: 'done'
+        });
+      }
+      if (statusEl) {
+        statusEl.textContent = '✅ 操作成功';
+        statusEl.dataset.status = 'success';
+      }
+      const resultBox = document.createElement('pre');
+      resultBox.className = 'file-action-result';
+      resultBox.textContent = this.formatFileActionSummary(action, result);
+      container.appendChild(resultBox);
+      if (this.fileAccess?.autoExecute) {
+        this.sendToolResultToAI(this.formatFileActionSummary(action, result));
+      } else {
+        const sendBtn = document.createElement('button');
+        sendBtn.textContent = '将结果发送给AI';
+        sendBtn.className = 'btn btn-secondary';
+        sendBtn.addEventListener('click', () => {
+          this.populateInputWithFileResult(this.formatFileActionSummary(action, result));
+        });
+        container.querySelector('.file-action-actions')?.appendChild(sendBtn);
+      }
+    } catch (error) {
+      console.error('文件操作失败:', error);
+      if (statusEl) {
+        statusEl.textContent = `❌ 失败：${error.message}`;
+        statusEl.dataset.status = 'error';
+      }
+    }
+  }
+
+  formatFileActionSummary(action, result) {
+    if (action.action === 'read') {
+      if (result.entries) {
+        return [
+          `目录读取成功: ${action.path}`,
+          '',
+          result.entries.join('\n')
+        ].join('\n');
+      }
+      return [
+        `文件读取成功: ${action.path}`,
+        '',
+        result.content || ''
+      ].join('\n');
+    }
+    if (action.action === 'write' || action.action === 'edit' || action.action === 'save') {
+      return `文件已更新: ${action.path}`;
+    }
+    if (action.action === 'delete' || action.action === 'remove') {
+      return `文件已删除: ${action.path}`;
+    }
+    return `操作完成: ${action.action} - ${action.path}`;
+  }
+
+  populateInputWithFileResult(summary) {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value = `文件操作结果：\n${summary}\n\n请继续。`;
+    input.focus();
+  }
+
+  isPathAllowed(targetPath, allowedDirs = []) {
+    if (!targetPath) return false;
+    const normalized = targetPath.replace(/\\/g, '/');
+    if (!allowedDirs || allowedDirs.length === 0) return false;
+    return allowedDirs.some(dir => {
+      const normalizedDir = dir.replace(/\\/g, '/').replace(/^\.\//, '');
+      if (!normalizedDir) return true;
+      return normalized.startsWith(normalizedDir);
+    });
+  }
+
+  sendToolResultToAI(summary) {
+    this.pendingToolResults = this.pendingToolResults || [];
+    this.pendingToolResults.push({
+      role: 'system',
+      content: `文件操作结果:\n${summary}`
+    });
+    if (this.fileAccess?.autoExecute) {
+      this.continueWithToolResults();
+    }
+  }
+
   beginGeneration() {
     this.isGenerating = true;
     this.stopRequested = false;
@@ -359,7 +734,7 @@ export class ChatPage {
     if (stopBtn) {
       stopBtn.style.display = 'inline-flex';
       stopBtn.disabled = false;
-      stopBtn.textContent = '停止';
+      stopBtn.textContent = '暂停';
     }
   }
 
@@ -375,7 +750,7 @@ export class ChatPage {
     if (stopBtn) {
       stopBtn.style.display = 'none';
       stopBtn.disabled = false;
-      stopBtn.textContent = '停止';
+      stopBtn.textContent = '暂停';
     }
   }
 
@@ -385,7 +760,7 @@ export class ChatPage {
     const stopBtn = document.getElementById('stop-btn');
     if (stopBtn) {
       stopBtn.disabled = true;
-      stopBtn.textContent = '停止中...';
+      stopBtn.textContent = '暂停中...';
     }
   }
 
@@ -395,11 +770,37 @@ export class ChatPage {
     if (!statsEl) return;
     if (!this.currentSessionId) {
       statsEl.textContent = '0 条记录';
+      this.updateContextSummary();
       return;
     }
     const session = this.sessionManager.getSession(this.currentSessionId);
     const count = session?.messages?.length || 0;
     statsEl.textContent = `${count} 条记录`;
+    this.updateContextSummary();
+  }
+
+  updateContextSummary() {
+    const summaryEl = document.getElementById('chat-context-summary');
+    if (!summaryEl) return;
+    if (!this.currentSessionId) {
+      summaryEl.textContent = '等待输入';
+      return;
+    }
+    const session = this.sessionManager.getSession(this.currentSessionId);
+    if (!session) {
+      summaryEl.textContent = '等待输入';
+      return;
+    }
+
+    const count = session.messages?.length || 0;
+    if (count === 0) {
+      summaryEl.textContent = '空白上下文';
+      return;
+    }
+    const dateValue = session.updatedAt || session.createdAt;
+    const date = dateValue ? new Date(dateValue) : new Date();
+    const readable = Number.isNaN(date.getTime()) ? '刚刚' : this.formatTime(date);
+    summaryEl.textContent = `${count} 条消息 · ${readable}`;
   }
 
   clearCurrentSession() {
@@ -484,7 +885,9 @@ export class ChatPage {
       const baseMessages = settings.enableMemory 
         ? session.messages.slice(-settings.contextLength * 2) 
         : session.messages.slice(-2);
-      const finalMessages = this.prependRoleInstruction(baseMessages);
+      const toolMessages = this.pendingToolResults || [];
+      this.pendingToolResults = [];
+      const finalMessages = this.prependRoleInstruction([...baseMessages, ...toolMessages]);
       
       // 创建助手消息容器
       const assistantMsg = this.showMessage('assistant', '');
@@ -541,6 +944,69 @@ export class ChatPage {
       this.updateSessionStats();
     } finally {
       this.endGeneration();
+    }
+  }
+
+  async continueWithToolResults() {
+    if (!this.pendingToolResults?.length) return;
+    if (this.isGenerating) return;
+    if (!this.aiClient) {
+      this.showMessage('assistant', '⚠️ 请先在"API配置"页面设置API密钥');
+      this.pendingToolResults = [];
+      return;
+    }
+    if (!this.currentSessionId) {
+      this.showMessage('assistant', '⚠️ 会话未初始化');
+      this.pendingToolResults = [];
+      return;
+    }
+    const session = this.sessionManager.getSession(this.currentSessionId);
+    if (!session) {
+      this.pendingToolResults = [];
+      return;
+    }
+    const settings = this.getSettings();
+    const baseMessages = settings.enableMemory 
+      ? session.messages.slice(-settings.contextLength * 2) 
+      : session.messages.slice(-2);
+    const extra = this.pendingToolResults;
+    this.pendingToolResults = [];
+    const finalMessages = this.prependRoleInstruction([...baseMessages, ...extra]);
+    try {
+      this.beginGeneration();
+      const assistantMsg = this.showMessage('assistant', '');
+      let fullResponse = '';
+      if (settings.enableStream) {
+        await this.aiClient.sendMessage(finalMessages, (chunk) => {
+          if (this.stopRequested) return;
+          fullResponse += chunk;
+          const contentDiv = assistantMsg.querySelector('.message-content');
+          if (contentDiv) {
+            contentDiv.innerHTML = this.formatMessage(fullResponse);
+          }
+          const messagesContainer = document.getElementById('chat-messages');
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        });
+      } else {
+        fullResponse = await this.aiClient.sendMessageSync?.(finalMessages) || '';
+        const contentDiv = assistantMsg.querySelector('.message-content');
+        if (contentDiv) {
+          contentDiv.innerHTML = this.formatMessage(fullResponse);
+        }
+      }
+      const assistantMessage = { role: 'assistant', content: fullResponse };
+      this.sessionManager.addMessage(this.currentSessionId, assistantMessage);
+      this.renderSessionList();
+    } catch (error) {
+      console.error('发送消息失败:', error);
+      this.showMessage('assistant', `❌ 错误: ${error.message}`);
+    } finally {
+      this.endGeneration();
+      if (this.pendingToolResults?.length) {
+        this.continueWithToolResults();
+      }
     }
   }
 
@@ -664,8 +1130,12 @@ export class ChatPage {
   }
 
   getSettings() {
+    const modelSelect = document.getElementById('model-select');
+    if (modelSelect && modelSelect.value) {
+      this.selectedModelValue = modelSelect.value;
+    }
     return {
-      model: document.getElementById('model-select')?.value || 'gpt-4',
+      model: this.selectedModelValue || 'gpt-4o',
       temperature: parseFloat(document.getElementById('temperature-slider')?.value || 0.7),
       contextLength: parseInt(document.getElementById('context-slider')?.value || 10),
       enableWeb: document.getElementById('enable-web')?.checked || false,
@@ -675,11 +1145,16 @@ export class ChatPage {
   }
 
   prependRoleInstruction(messages) {
+    const systemPrompts = [];
+    const basePrompt = this.getBaseSystemPrompt();
+    if (basePrompt) {
+      systemPrompts.push({ role: 'system', content: basePrompt });
+    }
     const role = this.roleModes[this.currentRoleIndex];
     if (role?.prompt) {
-      return [{ role: 'system', content: role.prompt }, ...messages];
+      systemPrompts.push({ role: 'system', content: role.prompt });
     }
-    return messages;
+    return [...systemPrompts, ...messages];
   }
 
   getAttachments() {
@@ -728,7 +1203,12 @@ export class ChatPage {
     messagesContainer.appendChild(messageEl);
     this.bindMessageActions(messageEl);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    this.updateEmptyState(true);
     
+    if (role === 'assistant') {
+      setTimeout(() => this.attachFileActions(messageEl, content), 50);
+    }
+
     return messageEl;
   }
 
@@ -841,19 +1321,14 @@ export class ChatPage {
     // 清空并重新渲染消息
     const messagesContainer = document.getElementById('chat-messages');
     if (messagesContainer) {
-      messagesContainer.innerHTML = '';
-      
-      if (session.messages.length === 0) {
-        // 显示欢迎消息
-        const welcomeMsg = document.createElement('div');
-        welcomeMsg.className = 'message assistant';
-        welcomeMsg.innerHTML = '<strong>AI助手</strong><br>你好！我是你的AI助手，可以帮你解答问题、编写代码、翻译文本等。';
-        messagesContainer.appendChild(welcomeMsg);
-      } else {
-        // 渲染历史消息
+      messagesContainer.innerHTML = this.getEmptyStateHtml();
+      if (session.messages.length > 0) {
         session.messages.forEach(msg => {
           this.showMessage(msg.role, msg.content);
         });
+        this.updateEmptyState(true);
+      } else {
+        this.updateEmptyState(false);
       }
     }
     
@@ -872,23 +1347,40 @@ export class ChatPage {
     if (!sessionList) return;
     
     const sessions = this.sessionManager.getSessions();
+    const keyword = this.sessionKeyword || '';
+    const normalizedKeyword = keyword.toLowerCase();
+    const filtered = keyword
+      ? sessions.filter(session => {
+          const title = (session.title || '').toLowerCase();
+          const snippet = this.getSessionSnippet(session).toLowerCase();
+          return title.includes(normalizedKeyword) || snippet.includes(normalizedKeyword);
+        })
+      : sessions;
     
-    if (sessions.length === 0) {
+    if (filtered.length === 0) {
       sessionList.innerHTML = '<div class="session-empty">暂无会话</div>';
       return;
     }
     
-    sessionList.innerHTML = sessions.map(session => {
+    sessionList.innerHTML = filtered.map(session => {
       const isActive = session.id === this.currentSessionId;
-      const date = new Date(session.updatedAt);
-      const timeStr = this.formatTime(date);
+      const timestamp = session.updatedAt || session.createdAt || Date.now();
+      const date = new Date(timestamp);
+      const timeStr = Number.isNaN(date.getTime()) ? '刚刚' : this.formatTime(date);
+      const safeTitle = this.escapeHtml(session.title || '未命名会话');
+      const snippet = this.escapeHtml(this.getSessionSnippet(session));
+      const messageCount = session.messages?.length || 0;
       
       return `
         <div class="session-item ${isActive ? 'active' : ''}" data-session-id="${session.id}">
-          <div class="session-title">${this.escapeHtml(session.title)}</div>
+          <div class="session-title-row">
+            <span class="session-indicator ${isActive ? 'active' : ''}"></span>
+            <span class="session-title">${safeTitle}</span>
+          </div>
+          <div class="session-subtitle">${snippet}</div>
           <div class="session-info">
             <span class="session-time">${timeStr}</span>
-            <span class="session-count">${session.messages.length}条消息</span>
+            <span class="session-count">${messageCount} 条</span>
           </div>
           <button class="session-delete" data-session-id="${session.id}" title="删除会话">🗑️</button>
         </div>
@@ -913,6 +1405,16 @@ export class ChatPage {
         this.deleteSession(sessionId);
       });
     });
+  }
+
+  getSessionSnippet(session) {
+    const lastMessage = session.messages?.[session.messages.length - 1]?.content || '尚无内容';
+    const normalized = lastMessage
+      .replace(/```[\s\S]*?```/g, '[代码]')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!normalized) return '尚无内容';
+    return normalized.length > 40 ? `${normalized.slice(0, 40)}…` : normalized;
   }
 
   deleteSession(sessionId) {
@@ -959,6 +1461,7 @@ export class ChatPage {
 
   destroy() {
     window.removeEventListener('availableModelsUpdated', this.handleAvailableModelsUpdate);
+    window.removeEventListener('fileAccessUpdated', this.handleFileAccessUpdate);
     // 清理事件监听器等
     const sendBtn = document.getElementById('send-btn');
     const chatInput = document.getElementById('chat-input');
@@ -969,6 +1472,7 @@ export class ChatPage {
     if (chatInput) {
       chatInput.replaceWith(chatInput.cloneNode(true));
     }
+    this.contentWrapper?.classList.remove('chat-layout');
   }
 
   getDefaultModelOptions() {
@@ -981,13 +1485,16 @@ export class ChatPage {
   }
 
   getAvailableModelsFromStorage() {
-    const config = this.configManager?.getCurrentConfig();
-    if (!config) return [];
-    const models = config.models?.length ? config.models : (config.model ? [config.model] : []);
-    if (models.length > 0) {
-      this.selectedModelValue = config.model || models[0];
+    try {
+      const saved = localStorage.getItem('ai-toolbox-available-models');
+      if (!saved) return [];
+      const models = JSON.parse(saved);
+      if (!Array.isArray(models)) return [];
+      return models.map(value => ({ value, label: value }));
+    } catch (error) {
+      console.warn('解析可用模型失败:', error);
+      return [];
     }
-    return models.map(value => ({ value, label: value }));
   }
 
   getModelOptionsHtml() {
@@ -1008,6 +1515,13 @@ export class ChatPage {
     if (this.selectedModelValue) {
       modelSelect.value = this.selectedModelValue;
     }
+    this.updateModeIndicator();
+  }
+
+  getCurrentModelLabel() {
+    const options = this.availableModels.length ? this.availableModels : this.getDefaultModelOptions();
+    const match = options.find(opt => opt.value === this.selectedModelValue);
+    return match?.label || this.selectedModelValue || '未配置';
   }
 }
   

@@ -32,10 +32,8 @@ export class SettingsPage {
     this.container.innerHTML = `
       <div class="settings-page">
         <div class="settings-header">
-          <h2>设置</h2>
           <p class="settings-subtitle">配置API密钥和管理应用设置</p>
         </div>
-        
         <div class="settings-tabs">
           <button class="settings-tab active" data-tab="api">
             <i>🔑</i>
@@ -44,6 +42,10 @@ export class SettingsPage {
           <button class="settings-tab" data-tab="keys">
             <i>📋</i>
             <span>密钥管理</span>
+          </button>
+          <button class="settings-tab" data-tab="files">
+            <i>🗂️</i>
+            <span>文件权限</span>
           </button>
         </div>
         
@@ -132,6 +134,35 @@ export class SettingsPage {
               <div class="keys-list" id="keys-list">
                 <!-- 密钥列表将在这里动态生成 -->
               </div>
+            </div>
+          </div>
+
+          <div class="settings-tab-content" id="files-tab">
+            <div class="settings-section">
+              <h3>文件操作权限</h3>
+              <p class="section-desc">配置 AI 文件读写授权及操作历史</p>
+              <label class="setting-checkbox">
+                <input type="checkbox" id="enable-file-ops">
+                <span>允许 AI 读取/修改受限目录内的文件</span>
+              </label>
+              <label class="setting-checkbox">
+                <input type="checkbox" id="auto-execute-file-ops">
+                <span>检测到文件指令时自动执行（高风险，请谨慎开启）</span>
+              </label>
+              <label class="setting-checkbox">
+                <input type="checkbox" id="show-file-steps">
+                <span>在聊天消息下显示执行步骤条</span>
+              </label>
+              <div class="form-group">
+                <label class="form-label">允许访问的目录（每行一个，默认相对于项目根目录）</label>
+                <textarea class="form-input" id="allowed-dirs" rows="4" placeholder="例如：&#10;src&#10;docs&#10;README.md"></textarea>
+                <div class="form-hint">为空表示不允许文件操作；填写“.”表示允许整个项目目录</div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-secondary" id="save-file-access">保存权限</button>
+                <button class="btn btn-secondary" id="clear-file-logs">清空历史</button>
+              </div>
+              <div class="file-log-list" id="file-log-list"></div>
             </div>
           </div>
         </div>
@@ -236,6 +267,16 @@ export class SettingsPage {
     document.getElementById('api-key')?.addEventListener('input', () => this.markConnectionPending());
     document.getElementById('base-url')?.addEventListener('input', () => this.markConnectionPending());
     document.getElementById('provider-enable')?.addEventListener('change', () => this.markConnectionPending());
+    document.getElementById('save-file-access')?.addEventListener('click', () => {
+      this.saveFileAccessConfig();
+    });
+    document.getElementById('clear-file-logs')?.addEventListener('click', () => {
+      if (confirm('确定要清空所有文件操作历史吗？')) {
+        clearFileActionLogs();
+        this.renderFileLogs();
+      }
+    });
+    this.renderFileAccessSettings();
   }
 
   switchTab(tabName) {
@@ -781,4 +822,97 @@ export class SettingsPage {
       }));
     }
   }
+
+  renderFileAccessSettings() {
+    const settings = getFileAccessSettings();
+    const enableCheckbox = document.getElementById('enable-file-ops');
+    const autoCheckbox = document.getElementById('auto-execute-file-ops');
+    const stepsCheckbox = document.getElementById('show-file-steps');
+    const dirsTextarea = document.getElementById('allowed-dirs');
+    if (enableCheckbox) enableCheckbox.checked = !!settings.enabled;
+    if (autoCheckbox) autoCheckbox.checked = !!settings.autoExecute;
+    if (stepsCheckbox) stepsCheckbox.checked = settings.showSteps !== false;
+    if (dirsTextarea) dirsTextarea.value = (settings.directories || []).join('\n');
+    this.renderFileLogs();
+  }
+
+  renderFileLogs() {
+    const { logs = [] } = getFileAccessSettings();
+    const container = document.getElementById('file-log-list');
+    if (!container) return;
+    if (!logs.length) {
+      container.innerHTML = '<div class="empty-state">暂无操作记录</div>';
+      return;
+    }
+    container.innerHTML = logs.map(log => `
+      <div class="file-log-item" data-log-id="${log.id}">
+        <div class="file-log-title">${log.action} - ${log.path}</div>
+        <div class="file-log-desc">时间：${new Date(log.timestamp).toLocaleString()} | 状态：${log.status || 'done'}</div>
+        <div class="file-log-actions">
+          ${log.previousContent != null ? `<button class="btn btn-secondary undo-log-btn" data-id="${log.id}">撤销</button>` : ''}
+          <button class="btn btn-secondary remove-log-btn" data-id="${log.id}">移除</button>
+        </div>
+      </div>
+    `).join('');
+    container.querySelectorAll('.undo-log-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.undoFileLog(btn.dataset.id));
+    });
+    container.querySelectorAll('.remove-log-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.removeFileLog(btn.dataset.id));
+    });
+  }
+
+  saveFileAccessConfig() {
+    const enableCheckbox = document.getElementById('enable-file-ops');
+    const autoCheckbox = document.getElementById('auto-execute-file-ops');
+    const stepsCheckbox = document.getElementById('show-file-steps');
+    const dirsTextarea = document.getElementById('allowed-dirs');
+    const dirs = dirsTextarea?.value?.split(/\r?\n/).map(dir => dir.trim()).filter(Boolean) || [];
+    const settings = saveFileAccessSettings({
+      ...getFileAccessSettings(),
+      enabled: !!enableCheckbox?.checked,
+      autoExecute: !!autoCheckbox?.checked,
+      showSteps: stepsCheckbox?.checked !== false,
+      directories: dirs
+    });
+    this.showToast('✅ 文件权限配置已保存');
+    return settings;
+  }
+
+  async undoFileLog(logId) {
+    const settings = getFileAccessSettings();
+    const log = settings.logs.find(item => item.id === logId);
+    if (!log || log.previousContent == null) {
+      this.showToast('无法撤销：缺少备份内容', 'error');
+      return;
+    }
+    if (!window.electronAPI?.fileAction) {
+      this.showToast('无法执行撤销：缺少文件能力', 'error');
+      return;
+    }
+    const confirmUndo = confirm(`确定要撤销 ${log.action} - ${log.path} 吗？`);
+    if (!confirmUndo) return;
+    try {
+      await window.electronAPI.fileAction({
+        action: 'write',
+        path: log.path,
+        content: log.previousContent
+      });
+      log.status = 'undone';
+      saveFileAccessSettings(settings);
+      this.renderFileLogs();
+      this.showToast('已恢复文件内容');
+    } catch (error) {
+      console.error('撤销失败', error);
+      this.showToast(`撤销失败: ${error.message}`, 'error');
+    }
+  }
+
+  removeFileLog(logId) {
+    const settings = getFileAccessSettings();
+    const logs = settings.logs.filter(item => item.id !== logId);
+    saveFileAccessSettings({ ...settings, logs });
+    this.renderFileLogs();
+  }
 }
+import { getFileAccessSettings, saveFileAccessSettings, clearFileActionLogs } from '../../utils/fileAccess.js';
