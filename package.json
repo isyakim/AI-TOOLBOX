@@ -1,43 +1,109 @@
 {
   "name": "ai-toolbox",
-  "version": "1.0.0",
-  "main": "src/main/main.js",
+  "version": "2.0.0",
+  "description": "AI Toolbox - 功能强大的桌面AI助手应用",
+  "main": "./out/main/index.js",
+  "author": "xKim",
+  "homepage": "https://github.com/xKim/ai-toolbox",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xKim/ai-toolbox.git"
+  },
   "scripts": {
-    "start": "electron .",
-    "dev": "electron .",
-    "build": "electron-builder",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "electron-vite dev",
+    "dev:web": "vite",
+    "build": "electron-vite build",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:win": "electron-vite build && electron-builder --win",
+    "build:linux": "electron-vite build && electron-builder --linux",
+    "preview": "electron-vite preview",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:unit:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@lancedb/lancedb": "^0.23.0",
+    "electron-updater": "^6.1.7",
+    "mammoth": "^1.11.0",
+    "marked": "^15.0.12",
+    "openai": "^6.17.0",
+    "pdf-parse": "^2.2.2",
+    "pinia": "^2.3.1",
+    "prismjs": "^1.30.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@playwright/test": "^1.41.0",
+    "@rushstack/eslint-patch": "^1.10.4",
+    "@types/node": "^20.17.19",
+    "@types/prismjs": "^1.26.5",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vitest/coverage-v8": "^1.2.0",
+    "@vue/eslint-config-prettier": "^10.1.0",
+    "@vue/eslint-config-typescript": "^14.3.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.19.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "happy-dom": "^13.3.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^1.2.0",
+    "vue-tsc": "^2.2.2"
   },
   "build": {
-    "appId": "com.example.app",
+    "appId": "com.xkim.ai-toolbox",
     "productName": "AI Toolbox",
-    "copyright": "Copyright © 2025 AI Toolbox",
     "directories": {
-      "output": "dist"
+      "buildResources": "build"
     },
     "files": [
-      "src/**/*"
+      "out/**/*"
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "xKim",
+      "repo": "ai-toolbox"
+    },
     "mac": {
-      "target": "dmg"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.ico"
     },
     "linux": {
-      "target": "AppImage"
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
     },
-    "dmg": {
-      "icon": "public/icon.png"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "electron": "^39.1.2",
-    "electron-builder": "^26.0.12",
-    "electron-reload": "^2.0.0-alpha.1"
   }
 }
