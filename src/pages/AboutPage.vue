@@ -12,7 +12,11 @@ const features = [
   { icon: '💬', title: '智能对话', desc: '支持多角色切换，具备流式响应能力与上下文记忆。' },
   { icon: '🛠️', title: 'AI 工具集', desc: '内置 6 种高频 AI 场景工具，高效解决具体任务。' },
   { icon: '📁', title: '文件操作', desc: 'AI 具备受控的本地文件读写能力，真正赋能开发流程。' },
-  { icon: '⚙️', title: '端点配置', desc: '支持 OpenAI 兼容格式，可自由接入 DeepSeek、Anthropic 等主流服务商。' }
+  {
+    icon: '⚙️',
+    title: '端点配置',
+    desc: '支持 OpenAI 兼容格式，可自由接入 DeepSeek、Anthropic 等主流服务商。'
+  }
 ]
 </script>
 
@@ -33,7 +37,8 @@ const features = [
             <h3>使命与愿景</h3>
             <p>
               AI Toolbox 旨在为开发者提供一个极致简洁、安全且功能强大的本地 AI 工作环境。
-              通过深度整合本地文件系统与流式 AI 能力，我们致力于将大模型的生产力真正带入到日常的工作流中。
+              通过深度整合本地文件系统与流式 AI
+              能力，我们致力于将大模型的生产力真正带入到日常的工作流中。
             </p>
           </section>
 
@@ -66,8 +71,9 @@ const features = [
           <section class="info-block privacy">
             <h3>🔐 隐私与安全</h3>
             <p>
-              我们深知数据隐私的重要性。AI Toolbox 的所有配置文件、对话记录和 API 密钥均加密存储在您的本地环境中。
-              除了与您配置的 AI 提供商进行必要的 API 通信外，应用本身不会收集或上传任何个人数据。
+              我们深知数据隐私的重要性。AI Toolbox 的所有配置文件、对话记录和 API
+              密钥均加密存储在您的本地环境中。 除了与您配置的 AI 提供商进行必要的 API
+              通信外，应用本身不会收集或上传任何个人数据。
             </p>
           </section>
         </aside>

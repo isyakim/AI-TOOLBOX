@@ -1,0 +1,23 @@
+{
+  "id": "api-doc",
+  "name": "API Doc",
+  "icon": "DEV",
+  "description": "Document API handlers, routes, errors, and examples.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Extract and document endpoints, parameters, requests, responses, errors, authentication, and assumptions.",
+  "fields": [
+    {
+      "id": "code",
+      "label": "API code or routes",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

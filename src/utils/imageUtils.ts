@@ -5,12 +5,20 @@
 
 export interface ImageInfo {
   file: File
-  url: string        // Object URL 用于预览
-  base64: string     // Base64 编码用于 API
+  url: string // Object URL 用于预览
+  base64: string // Base64 编码用于 API
   width: number
   height: number
-  size: number       // bytes
+  size: number // bytes
   type: string
+}
+
+export const MAX_IMAGES = 4
+export const MAX_IMAGE_SIZE = 20 * 1024 * 1024
+export const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
+export function isValidImageType(type: string): boolean {
+  return SUPPORTED_IMAGE_TYPES.includes(type)
 }
 
 /**
@@ -68,12 +76,7 @@ export async function compressImage(
     type?: 'image/jpeg' | 'image/png' | 'image/webp'
   } = {}
 ): Promise<{ blob: Blob; dataUrl: string }> {
-  const {
-    maxWidth = 1920,
-    maxHeight = 1080,
-    quality = 0.85,
-    type = 'image/jpeg'
-  } = options
+  const { maxWidth = 1920, maxHeight = 1080, quality = 0.85, type = 'image/jpeg' } = options
 
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -135,17 +138,14 @@ export async function compressImage(
 /**
  * 处理上传的图片文件，返回完整的 ImageInfo
  */
-export async function processImageFile(
-  file: File,
-  compress: boolean = true
-): Promise<ImageInfo> {
+export async function processImageFile(file: File, compress: boolean = true): Promise<ImageInfo> {
   // 验证文件类型
-  if (!file.type.startsWith('image/')) {
+  if (!isValidImageType(file.type)) {
     throw new Error('请选择有效的图片文件')
   }
 
   // 验证文件大小 (最大 20MB)
-  if (file.size > 20 * 1024 * 1024) {
+  if (file.size > MAX_IMAGE_SIZE) {
     throw new Error('图片大小不能超过 20MB')
   }
 
@@ -181,7 +181,7 @@ export async function processImageFile(
 export async function getImageFromClipboard(): Promise<File | null> {
   try {
     const clipboardItems = await navigator.clipboard.read()
-    
+
     for (const item of clipboardItems) {
       for (const type of item.types) {
         if (type.startsWith('image/')) {
@@ -190,7 +190,7 @@ export async function getImageFromClipboard(): Promise<File | null> {
         }
       }
     }
-    
+
     return null
   } catch {
     return null
@@ -204,7 +204,9 @@ export function buildVisionContent(
   text: string,
   images: ImageInfo[]
 ): Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> {
-  const content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = []
+  const content: Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+  > = []
 
   // 添加文本
   if (text.trim()) {
@@ -228,5 +230,5 @@ export function buildVisionContent(
  * 清理 Object URLs
  */
 export function revokeImageUrls(images: ImageInfo[]) {
-  images.forEach(img => URL.revokeObjectURL(img.url))
+  images.forEach((img) => URL.revokeObjectURL(img.url))
 }

@@ -1,14 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AIClient, createAIClient, getAIClient, destroyAIClient } from '@/services/aiClient'
+import { getAIClient } from '@/services/aiClient'
 import type { ChatMessage as AIMessage, ContentPart } from '@/services/aiClient'
 import { RAGService } from '@/services/ragService'
+import type { RAGCitation } from '@/services/ragService'
 import type { ImageInfo } from '@/utils/imageUtils'
+import {
+  loadChatSnapshot,
+  saveChatSnapshot,
+  type ChatSnapshot
+} from '@/features/chat/repositories/chatRepository'
 
 export interface MessageImage {
-  url: string       // 预览 URL
-  base64: string    // Base64 编码
-  type: string      // MIME 类型
+  url: string // 预览 URL
+  base64: string // Base64 编码
+  type: string // MIME 类型
 }
 
 export interface Message {
@@ -16,7 +22,8 @@ export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
-  images?: MessageImage[]  // 附加的图片
+  images?: MessageImage[] // 附加的图片
+  citations?: RAGCitation[]
 }
 
 export interface Session {
@@ -42,12 +49,21 @@ export interface ChatSettings {
   useRAG: boolean
 }
 
+const DEFAULT_CHAT_SETTINGS: ChatSettings = {
+  temperature: 0.7,
+  contextLength: 10,
+  enableStream: true,
+  enableMemory: true,
+  useRAG: false
+}
+
 export const ROLE_MODES: RoleMode[] = [
   {
     id: 'roo-helper',
     title: 'Roo · 默认助手',
     desc: '友好万能型，回答清晰有条理。',
-    prompt: '你是 Roo，一位沉稳可靠的助手。请以结构清晰、语气友好的方式回答，并在需要时给出可执行的步骤。'
+    prompt:
+      '你是 Roo，一位沉稳可靠的助手。请以结构清晰、语气友好的方式回答，并在需要时给出可执行的步骤。'
   },
   {
     id: 'roo-coder',
@@ -94,35 +110,30 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   const streamingMessageId = ref<string | null>(null)
   const currentRoleId = ref<string>('roo-helper')
-  const settings = ref<ChatSettings>({
-    temperature: 0.7,
-    contextLength: 10,
-    enableStream: true,
-    enableMemory: true,
-    useRAG: false
-  })
+  const settings = ref<ChatSettings>({ ...DEFAULT_CHAT_SETTINGS })
   const searchKeyword = ref('')
 
   // Getters
-  const activeSession = computed(() =>
-    sessions.value.find(s => s.id === activeSessionId.value) || null
+  const activeSession = computed(
+    () => sessions.value.find((s) => s.id === activeSessionId.value) || null
   )
 
-  const currentRole = computed(() =>
-    ROLE_MODES.find(r => r.id === currentRoleId.value) || ROLE_MODES[0]
+  const currentRole = computed(
+    () => ROLE_MODES.find((r) => r.id === currentRoleId.value) || ROLE_MODES[0]
   )
 
   const filteredSessions = computed(() => {
     const keyword = searchKeyword.value.toLowerCase()
     let result = [...sessions.value]
-    
+
     if (keyword) {
-      result = result.filter(s => 
-        s.title.toLowerCase().includes(keyword) ||
-        s.messages.some(m => m.content.toLowerCase().includes(keyword))
+      result = result.filter(
+        (s) =>
+          s.title.toLowerCase().includes(keyword) ||
+          s.messages.some((m) => m.content.toLowerCase().includes(keyword))
       )
     }
-    
+
     return result.sort((a, b) => b.updatedAt - a.updatedAt)
   })
 
@@ -167,7 +178,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function deleteSession(id: string) {
-    sessions.value = sessions.value.filter(s => s.id !== id)
+    sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
       activeSessionId.value = sessions.value[0]?.id || null
     }
@@ -175,15 +186,18 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function renameSession(id: string, title: string) {
-    const session = sessions.value.find(s => s.id === id)
+    const session = sessions.value.find((s) => s.id === id)
     if (session) {
       session.title = title
       saveToStorage()
     }
   }
 
-  function addMessage(sessionId: string, message: Omit<Message, 'id' | 'timestamp'>): string | null {
-    const session = sessions.value.find(s => s.id === sessionId)
+  function addMessage(
+    sessionId: string,
+    message: Omit<Message, 'id' | 'timestamp'>
+  ): string | null {
+    const session = sessions.value.find((s) => s.id === sessionId)
     if (session) {
       const newMessage: Message = {
         ...message,
@@ -192,12 +206,12 @@ export const useChatStore = defineStore('chat', () => {
       }
       session.messages.push(newMessage)
       session.updatedAt = Date.now()
-      
+
       // Auto-generate title from first user message
       if (session.title === '新对话' && message.role === 'user') {
         session.title = message.content.slice(0, 30) + (message.content.length > 30 ? '...' : '')
       }
-      
+
       saveToStorage()
       return newMessage.id
     }
@@ -205,9 +219,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function updateMessage(sessionId: string, messageId: string, content: string) {
-    const session = sessions.value.find(s => s.id === sessionId)
+    const session = sessions.value.find((s) => s.id === sessionId)
     if (session) {
-      const message = session.messages.find(m => m.id === messageId)
+      const message = session.messages.find((m) => m.id === messageId)
       if (message) {
         message.content = content
         saveToStorage()
@@ -215,16 +229,27 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function deleteMessage(sessionId: string, messageId: string) {
-    const session = sessions.value.find(s => s.id === sessionId)
+  function updateMessageCitations(sessionId: string, messageId: string, citations: RAGCitation[]) {
+    const session = sessions.value.find((s) => s.id === sessionId)
     if (session) {
-      session.messages = session.messages.filter(m => m.id !== messageId)
+      const message = session.messages.find((m) => m.id === messageId)
+      if (message) {
+        message.citations = citations
+        saveToStorage()
+      }
+    }
+  }
+
+  function deleteMessage(sessionId: string, messageId: string) {
+    const session = sessions.value.find((s) => s.id === sessionId)
+    if (session) {
+      session.messages = session.messages.filter((m) => m.id !== messageId)
       saveToStorage()
     }
   }
 
   function clearSession(sessionId: string) {
-    const session = sessions.value.find(s => s.id === sessionId)
+    const session = sessions.value.find((s) => s.id === sessionId)
     if (session) {
       session.messages = []
       session.updatedAt = Date.now()
@@ -234,12 +259,12 @@ export const useChatStore = defineStore('chat', () => {
 
   function setRole(roleId: string) {
     currentRoleId.value = roleId
-    localStorage.setItem('ai-toolbox-current-role', roleId)
+    saveToStorage()
   }
 
   function updateSettings(newSettings: Partial<ChatSettings>) {
     settings.value = { ...settings.value, ...newSettings }
-    localStorage.setItem('ai-toolbox-chat-settings', JSON.stringify(settings.value))
+    saveToStorage()
   }
 
   function setSearchKeyword(keyword: string) {
@@ -270,19 +295,26 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       // Prepare messages for API
-      const session = sessions.value.find(s => s.id === sessionId)
+      const session = sessions.value.find((s) => s.id === sessionId)
       if (!session) return
 
       // Build context with role prompt and file action guidance
       let rolePrompt = currentRole.value.prompt + '\n' + FILE_ACTION_PROMPT
-      
+      let citations: RAGCitation[] = []
+
       // RAG Context Injection
       if (settings.value.useRAG) {
         try {
           const ragRes = await RAGService.query(content)
           if (ragRes.success && ragRes.results && ragRes.results.length > 0) {
-            const contextText = ragRes.results.map((r: any) => r.text).join('\n---\n')
-            rolePrompt += `\n\n[来自知识库的相关上下文]:\n${contextText}\n\n请优先参考以上上下文回答用户的问题。`
+            citations = RAGService.mapResultsToCitations(ragRes.results)
+            updateMessageCitations(sessionId, assistantMsgId, citations)
+            const contextText = citations
+              .map(
+                (citation, index) => `[source ${index + 1}] ${citation.source}\n${citation.snippet}`
+              )
+              .join('\n---\n')
+            rolePrompt += `\n\nRelevant project knowledge:\n${contextText}\n\nUse this context when it is relevant. Cite the file paths naturally in your answer.`
           }
         } catch (e) {
           console.error('RAG Query Failed:', e)
@@ -296,15 +328,17 @@ export const useChatStore = defineStore('chat', () => {
       const apiMessages: AIMessage[] = [
         { role: 'system', content: rolePrompt },
         ...contextMessages
-          .filter(m => m.id !== assistantMsgId)
-          .map(m => ({ role: m.role, content: m.content }))
+          .filter((m) => m.id !== assistantMsgId)
+          .map((m) => ({ role: m.role, content: m.content }))
       ]
 
       // Stream response
       await aiClient.chat(apiMessages, {
         onToken: (token: string) => {
-          updateMessage(sessionId, assistantMsgId, 
-            (session.messages.find(m => m.id === assistantMsgId)?.content || '') + token
+          updateMessage(
+            sessionId,
+            assistantMsgId,
+            (session.messages.find((m) => m.id === assistantMsgId)?.content || '') + token
           )
         },
         onError: (error: Error) => {
@@ -343,14 +377,14 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     // 构建消息图片
-    const messageImages: MessageImage[] = images.map(img => ({
+    const messageImages: MessageImage[] = images.map((img) => ({
       url: img.url,
       base64: img.base64,
       type: img.type
     }))
 
     // 添加用户消息（包含图片）
-    const session = sessions.value.find(s => s.id === sessionId)
+    const session = sessions.value.find((s) => s.id === sessionId)
     if (!session) return
 
     const userMessage: Message = {
@@ -378,14 +412,21 @@ export const useChatStore = defineStore('chat', () => {
     try {
       // 构建 API 消息
       let rolePrompt = currentRole.value.prompt + '\n' + FILE_ACTION_PROMPT
+      let citations: RAGCitation[] = []
 
       // RAG 上下文注入
       if (settings.value.useRAG) {
         try {
           const ragRes = await RAGService.query(content)
           if (ragRes.success && ragRes.results && ragRes.results.length > 0) {
-            const contextText = ragRes.results.map((r: any) => r.text).join('\n---\n')
-            rolePrompt += `\n\n[来自知识库的相关上下文]:\n${contextText}\n\n请优先参考以上上下文回答用户的问题。`
+            citations = RAGService.mapResultsToCitations(ragRes.results)
+            updateMessageCitations(sessionId, assistantMsgId, citations)
+            const contextText = citations
+              .map(
+                (citation, index) => `[source ${index + 1}] ${citation.source}\n${citation.snippet}`
+              )
+              .join('\n---\n')
+            rolePrompt += `\n\nRelevant project knowledge:\n${contextText}\n\nUse this context when it is relevant. Cite the file paths naturally in your answer.`
           }
         } catch (e) {
           console.error('RAG Query Failed:', e)
@@ -398,18 +439,14 @@ export const useChatStore = defineStore('chat', () => {
         : session.messages.slice(-2)
 
       // 构建 API 消息（支持多模态）
-      const apiMessages: AIMessage[] = [
-        { role: 'system', content: rolePrompt }
-      ]
+      const apiMessages: AIMessage[] = [{ role: 'system', content: rolePrompt }]
 
       for (const m of contextMessages) {
         if (m.id === assistantMsgId) continue
 
         if (m.images && m.images.length > 0) {
           // 多模态消息：包含图片
-          const contentParts: ContentPart[] = [
-            { type: 'text', text: m.content }
-          ]
+          const contentParts: ContentPart[] = [{ type: 'text', text: m.content }]
           for (const img of m.images) {
             contentParts.push({
               type: 'image_url',
@@ -426,8 +463,10 @@ export const useChatStore = defineStore('chat', () => {
       // 执行流式请求
       await aiClient.chat(apiMessages, {
         onToken: (token: string) => {
-          updateMessage(sessionId, assistantMsgId, 
-            (session.messages.find(m => m.id === assistantMsgId)?.content || '') + token
+          updateMessage(
+            sessionId,
+            assistantMsgId,
+            (session.messages.find((m) => m.id === assistantMsgId)?.content || '') + token
           )
         },
         onError: (error: Error) => {
@@ -442,40 +481,35 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function saveToStorage() {
-    localStorage.setItem('ai-toolbox-sessions', JSON.stringify(sessions.value))
-    localStorage.setItem('ai-toolbox-active-session', activeSessionId.value || '')
+    const snapshot: ChatSnapshot = {
+      version: 1,
+      sessions: sessions.value,
+      activeSessionId: activeSessionId.value,
+      currentRoleId: currentRoleId.value,
+      settings: settings.value
+    }
+    saveChatSnapshot(snapshot)
   }
 
   function loadFromStorage() {
-    try {
-      // Load sessions
-      const saved = localStorage.getItem('ai-toolbox-sessions')
-      if (saved) {
-        sessions.value = JSON.parse(saved)
-      }
-      activeSessionId.value = localStorage.getItem('ai-toolbox-active-session') || null
-      
-      // Load role
-      const savedRole = localStorage.getItem('ai-toolbox-current-role')
-      if (savedRole && ROLE_MODES.find(r => r.id === savedRole)) {
-        currentRoleId.value = savedRole
-      }
-      
-      // Load settings
-      const savedSettings = localStorage.getItem('ai-toolbox-chat-settings')
-      if (savedSettings) {
-        settings.value = { ...settings.value, ...JSON.parse(savedSettings) }
-      }
-      
-      // Create a session if none exists
-      if (sessions.value.length === 0) {
-        createSession()
-      } else if (!activeSessionId.value) {
-        activeSessionId.value = sessions.value[0].id
-      }
-    } catch (e) {
-      console.error('Failed to load sessions:', e)
+    const snapshot = loadChatSnapshot({
+      defaultRoleId: ROLE_MODES[0].id,
+      defaultSettings: DEFAULT_CHAT_SETTINGS,
+      validRoleIds: ROLE_MODES.map((role) => role.id)
+    })
+
+    if (snapshot) {
+      sessions.value = snapshot.sessions
+      activeSessionId.value = snapshot.activeSessionId
+      currentRoleId.value = snapshot.currentRoleId
+      settings.value = snapshot.settings
+    }
+
+    if (sessions.value.length === 0) {
       createSession()
+    } else if (!activeSessionId.value) {
+      activeSessionId.value = sessions.value[0].id
+      saveToStorage()
     }
   }
 
@@ -497,6 +531,7 @@ export const useChatStore = defineStore('chat', () => {
     renameSession,
     addMessage,
     updateMessage,
+    updateMessageCitations,
     deleteMessage,
     clearSession,
     setRole,

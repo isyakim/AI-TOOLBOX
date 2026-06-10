@@ -99,7 +99,7 @@ class SpeechService {
       onStart?.()
     }
 
-    this.recognition.onresult = (event) => {
+    this.recognition.onresult = (event: any) => {
       const result = event.results[event.results.length - 1]
       const transcript = result[0].transcript
       const confidence = result[0].confidence
@@ -108,14 +108,14 @@ class SpeechService {
       onResult?.({ transcript, confidence, isFinal })
     }
 
-    this.recognition.onerror = (event) => {
+    this.recognition.onerror = (event: any) => {
       this.isListening = false
-      
+
       const errorMessages: Record<string, string> = {
         'no-speech': '未检测到语音，请重试',
-        'aborted': '语音识别已取消',
+        aborted: '语音识别已取消',
         'audio-capture': '无法访问麦克风，请检查权限',
-        'network': '网络错误',
+        network: '网络错误',
         'not-allowed': '麦克风权限被拒绝',
         'service-not-allowed': '语音服务不可用'
       }
@@ -131,7 +131,7 @@ class SpeechService {
     try {
       this.recognition.start()
       return true
-    } catch (error) {
+    } catch {
       callbacks.onError?.('启动语音识别失败')
       return false
     }
@@ -171,22 +171,25 @@ class SpeechService {
    * 获取中文语音
    */
   getChineseVoices(): SpeechSynthesisVoice[] {
-    return this.getVoices().filter(v => 
-      v.lang.startsWith('zh') || v.lang.includes('CN') || v.lang.includes('TW')
+    return this.getVoices().filter(
+      (v) => v.lang.startsWith('zh') || v.lang.includes('CN') || v.lang.includes('TW')
     )
   }
 
   /**
    * 朗读文本 (TTS)
    */
-  speak(text: string, options: {
-    voice?: SpeechSynthesisVoice
-    rate?: number
-    pitch?: number
-    volume?: number
-    onEnd?: () => void
-    onError?: (error: string) => void
-  } = {}): boolean {
+  speak(
+    text: string,
+    options: {
+      voice?: SpeechSynthesisVoice
+      rate?: number
+      pitch?: number
+      volume?: number
+      onEnd?: () => void
+      onError?: (error: string) => void
+    } = {}
+  ): boolean {
     if (!this.synthesis) {
       options.onError?.('您的浏览器不支持语音合成')
       return false
@@ -198,7 +201,7 @@ class SpeechService {
     const { voice, rate = 1.0, pitch = 1.0, volume = 1.0, onEnd, onError } = options
 
     const utterance = new SpeechSynthesisUtterance(text)
-    
+
     // 设置语音参数
     if (voice) {
       utterance.voice = voice
@@ -209,7 +212,7 @@ class SpeechService {
         utterance.voice = chineseVoices[0]
       }
     }
-    
+
     utterance.rate = rate
     utterance.pitch = pitch
     utterance.volume = volume

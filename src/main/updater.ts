@@ -9,7 +9,7 @@ import log from 'electron-log'
 
 // 配置日志
 autoUpdater.logger = log
-autoUpdater.logger.transports.file.level = 'info'
+log.transports.file.level = 'info'
 
 // 配置更新选项
 autoUpdater.autoDownload = false

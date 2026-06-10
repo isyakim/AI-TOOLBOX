@@ -1,0 +1,23 @@
+{
+  "id": "commit-message",
+  "name": "Commit Message",
+  "icon": "DEV",
+  "description": "Generate a conventional commit message from a diff.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Generate one precise conventional commit subject, an optional body, and a changelog note.",
+  "fields": [
+    {
+      "id": "diff",
+      "label": "Git diff",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

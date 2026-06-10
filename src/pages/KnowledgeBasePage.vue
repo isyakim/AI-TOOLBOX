@@ -1,75 +1,150 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RAGService } from '@/services/ragService'
 import { useConfigStore } from '@/stores'
+import type { ProjectHealthReport } from '@/env'
 
 const configStore = useConfigStore()
+
+const extensionOptions = [
+  '.md',
+  '.txt',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.vue',
+  '.json',
+  '.css',
+  '.html'
+]
+const selectedExtensions = ref<string[]>(['.md', '.ts', '.tsx', '.vue', '.json'])
+const projectPath = ref(localStorage.getItem('ai-toolbox-project-path') || '')
 const isInitializing = ref(false)
-const isIngesting = ref(false)
-const documents = ref<{ name: string; size: string; status: string }[]>([])
+const isIndexing = ref(false)
+const isChecking = ref(false)
+const indexStatus = ref<Record<string, unknown>>({})
+const healthReport = ref<ProjectHealthReport | null>(null)
 const log = ref<string[]>([])
 
-function addLog(msg: string) {
-  log.value.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`)
+const progressPercent = computed(() => {
+  const total = Number(indexStatus.value.totalFiles || 0)
+  const indexed = Number(indexStatus.value.indexedFiles || 0)
+  if (!total) return 0
+  return Math.round((indexed / total) * 100)
+})
+
+function addLog(message: string) {
+  log.value.unshift(`[${new Date().toLocaleTimeString()}] ${message}`)
 }
 
 async function initDB() {
   isInitializing.value = true
   try {
     const res = await RAGService.init()
-    if (res.success) {
-      addLog('✅ 向量数据库初始化成功')
-    } else {
-      addLog(`❌ 初始化失败: ${res.message}`)
-    }
-  } catch (e: any) {
-    addLog(`❌ 错误: ${e.message}`)
+    addLog(res.success ? 'Vector database initialized.' : `Init failed: ${res.message}`)
+  } catch (error: any) {
+    addLog(`Init error: ${error.message}`)
   } finally {
     isInitializing.value = false
   }
 }
 
-async function handleFileUpload(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (!files || !files.length) return
+async function chooseDirectory() {
+  const res = await window.api.selectDirectory()
+  if (res.success && res.path) {
+    projectPath.value = res.path
+    localStorage.setItem('ai-toolbox-project-path', res.path)
+    addLog(`Selected project: ${res.path}`)
+  }
+}
 
-  isIngesting.value = true
-  const file = files[0]
-  addLog(`📂 正在准备解析文件: ${file.name}`)
-  
+async function refreshStatus() {
+  const res = await RAGService.getIndexStatus()
+  indexStatus.value = res
+}
+
+async function indexProject() {
+  if (!projectPath.value) {
+    addLog('Select a project directory first.')
+    return
+  }
+
+  isIndexing.value = true
+  await initDB()
+
+  const timer = window.setInterval(refreshStatus, 1000)
   try {
-    const res = await RAGService.ingest(file)
-    if (res.success) {
-      addLog(`✅ 文件 "${file.name}" 已成功向量化并存入知识库`)
-      documents.value.push({
-        name: file.name,
-        size: (file.size / 1024).toFixed(1) + ' KB',
-        status: '已索引'
-      })
-    } else {
-      addLog(`❌ 注入失败: ${res.message}`)
-    }
-  } catch (e: any) {
-    addLog(`❌ 解析错误: ${e.message}`)
+    const res = await RAGService.indexProject({
+      rootPath: projectPath.value,
+      extensions: selectedExtensions.value
+    })
+    indexStatus.value = res
+    addLog(res.success ? String(res.message || 'Project indexed.') : `Index failed: ${res.message}`)
+  } catch (error: any) {
+    addLog(`Index error: ${error.message}`)
   } finally {
-    isIngesting.value = false
+    window.clearInterval(timer)
+    await refreshStatus()
+    isIndexing.value = false
+  }
+}
+
+async function runHealthCheck() {
+  if (!projectPath.value) {
+    addLog('Select a project directory first.')
+    return
+  }
+
+  isChecking.value = true
+  try {
+    const res = await RAGService.runProjectHealthCheck(projectPath.value)
+    if (res.success && res.report) {
+      healthReport.value = res.report
+      addLog(`Health check scanned ${res.report.scannedFiles} files.`)
+    } else {
+      addLog(`Health check failed: ${res.message}`)
+    }
+  } catch (error: any) {
+    addLog(`Health check error: ${error.message}`)
+  } finally {
+    isChecking.value = false
   }
 }
 
 async function clearDB() {
-  if (!confirm('确定要清空所有知识库数据吗？')) return
+  if (!confirm('Clear all indexed knowledge base data?')) return
   const res = await window.api.ragClear()
   if (res.success) {
-    addLog('🗑️ 知识库已清空')
-    documents.value = []
+    indexStatus.value = {}
+    healthReport.value = null
+    addLog('Knowledge base cleared.')
   }
 }
 
-onMounted(() => {
-  if (configStore.isReady) {
-    initDB()
+function toggleExtension(extension: string) {
+  if (selectedExtensions.value.includes(extension)) {
+    selectedExtensions.value = selectedExtensions.value.filter((item) => item !== extension)
   } else {
-    addLog('⚠️ 请先配置 API 秘钥，以便使用 Embedding 功能')
+    selectedExtensions.value.push(extension)
+  }
+}
+
+onMounted(async () => {
+  if (projectPath.value) {
+    const workspace = await window.api.setWorkspace(projectPath.value)
+    if (!workspace.success) {
+      projectPath.value = ''
+      localStorage.removeItem('ai-toolbox-project-path')
+      addLog(`Stored workspace is unavailable: ${workspace.message}`)
+    }
+  }
+
+  if (configStore.isReady) {
+    await initDB()
+    await refreshStatus()
+  } else {
+    addLog('Configure an API key before indexing. Embeddings require an active provider.')
   }
 })
 </script>
@@ -77,68 +152,115 @@ onMounted(() => {
 <template>
   <div class="knowledge-page">
     <header class="page-header">
-      <div class="header-info">
-        <h2>本地知识库 (RAG)</h2>
-        <p>让 AI 学习你的私有文档，提供更精准的回答</p>
+      <div>
+        <h2>Project Knowledge Base</h2>
+        <p>Index a local project so chat can answer with file-level source snippets.</p>
       </div>
       <div class="header-actions">
-        <button class="btn btn-secondary" @click="clearDB">清空库</button>
-        <button class="btn btn-primary" :disabled="isInitializing" @click="initDB">
-          {{ isInitializing ? '初始化中...' : '重新初始化' }}
+        <button class="btn secondary" @click="clearDB">Clear</button>
+        <button class="btn secondary" :disabled="isInitializing" @click="initDB">
+          {{ isInitializing ? 'Initializing...' : 'Init DB' }}
         </button>
       </div>
     </header>
 
-    <div class="knowledge-content">
-      <!-- Upload Section -->
-      <section class="upload-section">
-        <div class="upload-card">
-          <input 
-            type="file" 
-            id="kb-upload" 
-            accept=".md,.txt,.pdf" 
-            @change="handleFileUpload" 
-            hidden 
-            :disabled="isIngesting"
-          >
-          <label for="kb-upload" class="upload-label" :class="{ loading: isIngesting }">
-            <span class="icon">{{ isIngesting ? '⏳' : '📥' }}</span>
-            <span class="text">{{ isIngesting ? '正在学习文档...' : '点击或拖拽上传文档' }}</span>
-            <span class="hint">支持 .md, .txt (PDF 实验性支持)</span>
-          </label>
+    <section class="project-card">
+      <div class="path-row">
+        <div class="path-copy">
+          <span class="label">Project directory</span>
+          <strong>{{ projectPath || 'No directory selected' }}</strong>
         </div>
+        <button class="btn secondary" @click="chooseDirectory">Choose Folder</button>
+      </div>
+
+      <div class="filter-row">
+        <span class="label">File types</span>
+        <div class="extension-list">
+          <button
+            v-for="extension in extensionOptions"
+            :key="extension"
+            class="extension-chip"
+            :class="{ active: selectedExtensions.includes(extension) }"
+            @click="toggleExtension(extension)"
+          >
+            {{ extension }}
+          </button>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button
+          class="btn primary"
+          :disabled="!configStore.isReady || isIndexing || !projectPath"
+          @click="indexProject"
+        >
+          {{ isIndexing ? 'Indexing...' : 'Index Project' }}
+        </button>
+        <button
+          class="btn secondary"
+          :disabled="isChecking || !projectPath"
+          @click="runHealthCheck"
+        >
+          {{ isChecking ? 'Checking...' : 'Project Health Check' }}
+        </button>
+      </div>
+    </section>
+
+    <div class="main-grid">
+      <section class="panel">
+        <h3>Index Status</h3>
+        <div class="status-grid">
+          <div>
+            <span>Status</span>
+            <strong>{{ indexStatus.status || 'idle' }}</strong>
+          </div>
+          <div>
+            <span>Files</span>
+            <strong>{{ indexStatus.indexedFiles || 0 }} / {{ indexStatus.totalFiles || 0 }}</strong>
+          </div>
+          <div>
+            <span>Chunks</span>
+            <strong>{{ indexStatus.totalChunks || 0 }}</strong>
+          </div>
+          <div>
+            <span>Current</span>
+            <strong>{{ indexStatus.currentFile || '-' }}</strong>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" :style="{ width: `${progressPercent}%` }"></div>
+        </div>
+        <p class="status-message">{{ indexStatus.message || 'No active index job.' }}</p>
       </section>
 
-      <div class="main-grid">
-        <!-- Document List -->
-        <section class="doc-section">
-          <h3>已学习文档</h3>
-          <div class="doc-list">
-            <div v-if="documents.length === 0" class="empty-docs">
-              还没有关联任何文档
+      <section class="panel">
+        <h3>Project Health</h3>
+        <div v-if="!healthReport" class="empty">
+          Run a health check to inspect README quality, dependencies, tests, and structure.
+        </div>
+        <div v-else class="health-list">
+          <div
+            v-for="finding in healthReport.findings"
+            :key="finding.title"
+            class="health-item"
+            :class="finding.status"
+          >
+            <div>
+              <strong>{{ finding.title }}</strong>
+              <p>{{ finding.detail }}</p>
             </div>
-            <div v-for="doc in documents" :key="doc.name" class="doc-item">
-              <span class="doc-icon">📄</span>
-              <div class="doc-info">
-                <span class="doc-name">{{ doc.name }}</span>
-                <span class="doc-meta">{{ doc.size }}</span>
-              </div>
-              <span class="doc-status">{{ doc.status }}</span>
-            </div>
+            <span>{{ finding.status }}</span>
           </div>
-        </section>
-
-        <!-- Operation Log -->
-        <section class="log-section">
-          <h3>操作日志</h3>
-          <div class="log-container">
-            <div v-for="(msg, i) in log" :key="i" class="log-entry">
-              {{ msg }}
-            </div>
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
+
+    <section class="panel log-panel">
+      <h3>Activity Log</h3>
+      <div class="log-container">
+        <div v-for="(message, index) in log" :key="index" class="log-entry">{{ message }}</div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -147,147 +269,222 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: var(--radius-lg);
+  gap: 20px;
   padding: var(--space-xl);
   overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
-.page-header {
+.page-header,
+.path-row,
+.action-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 40px;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.page-header h2 {
-  font-size: 1.5rem;
+.page-header h2,
+.panel h3 {
   margin: 0;
 }
 
-.page-header p {
+.page-header p,
+.label,
+.empty,
+.status-message {
   color: var(--text-light);
-  margin: 4px 0 0;
 }
 
-.header-actions {
+.header-actions,
+.extension-list {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.upload-section {
-  margin-bottom: 40px;
+.project-card,
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 20px;
 }
 
-.upload-label {
+.project-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-lg);
+  gap: 18px;
+}
+
+.path-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.path-copy strong {
+  word-break: break-all;
+}
+
+.filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.extension-chip {
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  border-radius: 999px;
+  padding: 6px 12px;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
-.upload-label:hover {
+.extension-chip.active {
+  color: #fff;
   border-color: var(--primary);
-  background: rgba(0, 122, 255, 0.02);
-}
-
-.upload-label.loading {
-  cursor: wait;
-  opacity: 0.7;
-}
-
-.upload-label .icon {
-  font-size: 3rem;
-  margin-bottom: 12px;
-}
-
-.upload-label .text {
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-.upload-label .hint {
-  color: var(--text-light);
-  font-size: 0.85rem;
-  margin-top: 8px;
+  background: var(--primary);
 }
 
 .main-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  gap: 20px;
 }
 
-.doc-list {
-  background: var(--secondary);
-  border-radius: var(--radius-md);
-  min-height: 200px;
-}
-
-.empty-docs {
-  padding: 40px;
-  text-align: center;
-  color: var(--text-light);
-}
-
-.doc-item {
-  display: flex;
-  align-items: center;
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+  margin-top: 16px;
 }
 
-.doc-info {
-  flex: 1;
+.status-grid div {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--secondary);
+  border-radius: var(--radius-md);
+  min-width: 0;
 }
 
-.doc-name {
-  font-weight: 500;
+.status-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.doc-meta {
-  font-size: 0.75rem;
+.progress-track {
+  height: 8px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--secondary);
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.health-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.health-item p {
+  margin: 4px 0 0;
   color: var(--text-light);
 }
 
-.doc-status {
+.health-item span {
   font-size: 0.75rem;
-  background: #10b981;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.health-item.good span {
+  color: #10b981;
+}
+.health-item.watch span {
+  color: #f59e0b;
+}
+.health-item.needs-work span {
+  color: #ef4444;
+}
+
+.log-panel {
+  min-height: 160px;
 }
 
 .log-container {
-  background: #1e1e1e;
-  border-radius: var(--radius-md);
-  padding: 16px;
-  height: 300px;
+  height: 150px;
+  margin-top: 12px;
   overflow-y: auto;
-  font-family: monospace;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: #111827;
+  color: #d1d5db;
+  font-family: Consolas, monospace;
   font-size: 0.8rem;
-  color: #dcdcdc;
 }
 
-.log-entry {
-  margin-bottom: 4px;
+.log-entry + .log-entry {
+  margin-top: 4px;
 }
 
 .btn {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.btn-primary { background: var(--primary); color: white; border: none; }
-.btn-secondary { background: var(--secondary); border: 1px solid var(--border); }
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn.primary {
+  color: #fff;
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.btn.secondary {
+  color: var(--text);
+  background: var(--secondary);
+}
+
+@media (max-width: 900px) {
+  .main-grid,
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header,
+  .path-row,
+  .action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 </style>

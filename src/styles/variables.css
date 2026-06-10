@@ -1,30 +1,42 @@
-/**
- * CSS Variables / Design Tokens
- * 系统级设计变量定义
- */
-
 :root {
-  /* ===== 间距系统 ===== */
-  --space-xxl: 32px;
-  --space-xl: 24px;
-  --space-lg: 20px;
-  --space-md: 16px;
-  --space-sm: 12px;
-  --space-xs: 8px;
+  --space-xxl: 28px;
+  --space-xl: 20px;
+  --space-lg: 16px;
+  --space-md: 12px;
+  --space-sm: 8px;
+  --space-xs: 6px;
 
-  /* ===== 圆角系统 ===== */
-  --radius-xl: 32px;
-  --radius-lg: 20px;
-  --radius-md: 14px;
-  --radius-sm: 10px;
+  --radius-xl: 8px;
+  --radius-lg: 8px;
+  --radius-md: 6px;
+  --radius-sm: 4px;
 
-  /* ===== 阴影系统 ===== */
-  --shadow-soft: 0 25px 70px rgba(15, 23, 42, 0.08);
-  --shadow-card: 0 14px 40px rgba(15, 23, 42, 0.06);
-  --shadow-inner: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  --shadow-soft: none;
+  --shadow-card: none;
+  --shadow-inner: none;
 
-  /* ===== 动画时长 ===== */
-  --transition-fast: 0.15s;
-  --transition-normal: 0.2s;
-  --transition-slow: 0.3s;
+  --transition-fast: 0.12s;
+  --transition-normal: 0.16s;
+  --transition-slow: 0.2s;
+
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-light: #dbeafe;
+  --secondary: #f8fafc;
+  --secondary-dark: #eef2f7;
+  --text: #111827;
+  --text-light: #6b7280;
+  --border: #d8dee8;
+  --surface: #ffffff;
+  --surface-muted: #f9fafb;
+  --bg-gradient-start: #f3f4f6;
+  --bg-gradient-end: #f3f4f6;
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+
+  --chat-input-bg: #ffffff;
+  --chat-input-border: #cfd7e3;
+  --chat-input-text: #111827;
+  --chat-input-accent: #6b7280;
 }

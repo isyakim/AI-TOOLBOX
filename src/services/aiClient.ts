@@ -57,12 +57,9 @@ export class AIClient {
   /**
    * 发送聊天请求（流式响应）
    */
-  async chat(
-    messages: ChatMessage[],
-    callbacks: StreamCallbacks = {}
-  ): Promise<string> {
+  async chat(messages: ChatMessage[], callbacks: StreamCallbacks = {}): Promise<string> {
     const { onStart, onToken, onComplete, onError } = callbacks
-    
+
     this.abortController = new AbortController()
     let fullText = ''
 
@@ -73,7 +70,7 @@ export class AIClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`
         },
         body: JSON.stringify({
           model: this.config.model,
@@ -100,7 +97,7 @@ export class AIClient {
         if (done) break
 
         const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n').filter(line => line.trim() !== '')
+        const lines = chunk.split('\n').filter((line) => line.trim() !== '')
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -111,10 +108,7 @@ export class AIClient {
               const parsed = JSON.parse(data)
               const delta = parsed.choices?.[0]?.delta
               const content = delta?.content || ''
-              
-              // 处理思考过程 (可选，部分模型如 DeepSeek R1 支持)
-              const reasoning = delta?.reasoning_content || ''
-              
+
               if (content) {
                 fullText += content
                 onToken?.(content)
@@ -128,7 +122,6 @@ export class AIClient {
 
       onComplete?.(fullText)
       return fullText
-
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
@@ -151,7 +144,7 @@ export class AIClient {
     try {
       const response = await fetch(`${this.config.baseUrl}/models`, {
         headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`
+          Authorization: `Bearer ${this.config.apiKey}`
         }
       })
 
@@ -159,15 +152,15 @@ export class AIClient {
         return { success: true, message: '连接成功' }
       } else {
         const error = await response.json().catch(() => ({}))
-        return { 
-          success: false, 
-          message: error.error?.message || `HTTP ${response.status}` 
+        return {
+          success: false,
+          message: error.error?.message || `HTTP ${response.status}`
         }
       }
     } catch (error) {
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : '连接失败' 
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : '连接失败'
       }
     }
   }

@@ -1,0 +1,23 @@
+{
+  "id": "regex-lab",
+  "name": "Regex Lab",
+  "icon": "DEV",
+  "description": "Create and explain regex patterns with test cases.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Return the regex, flags, explanation, language usage, positive and negative tests, and backtracking risks.",
+  "fields": [
+    {
+      "id": "goal",
+      "label": "Matching goal",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

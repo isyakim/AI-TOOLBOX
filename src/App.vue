@@ -1,14 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import AppLayout from './components/layout/AppLayout.vue'
-import { useThemeStore } from '@/stores'
-
-const themeStore = useThemeStore()
-
-onMounted(() => {
-  themeStore.loadFromStorage()
-})
 </script>
 
 <template>

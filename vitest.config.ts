@@ -12,14 +12,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'lcov', 'html'],
-      exclude: [
-        'node_modules/',
-        'dist/',
-        '**/*.d.ts',
-        'tests/',
-        '**/*.test.ts',
-        '**/*.spec.ts'
-      ]
+      exclude: ['node_modules/', 'dist/', '**/*.d.ts', 'tests/', '**/*.test.ts', '**/*.spec.ts']
     },
     setupFiles: ['./tests/setup.ts']
   },

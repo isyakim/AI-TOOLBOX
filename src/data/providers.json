@@ -80,9 +80,7 @@
     "baseURL": "https://api.anthropic.com/v1",
     "docs": "https://docs.anthropic.com/claude/docs/claude-code",
     "endpoint": "/messages",
-    "models": [
-      { "value": "claude-code-3", "label": "Claude Code 3" }
-    ]
+    "models": [{ "value": "claude-code-3", "label": "Claude Code 3" }]
   },
   {
     "id": "deepinfra",

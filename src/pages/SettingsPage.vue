@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useConfigStore, PROVIDERS } from '@/stores'
-import { getAIClient } from '@/services/aiClient'
 
 const configStore = useConfigStore()
 
@@ -17,22 +16,24 @@ const testResult = ref<{ success: boolean; message: string } | null>(null)
 const isTesting = ref(false)
 const isSaving = ref(false)
 
-const selectedProvider = computed(() => 
-  PROVIDERS.find(p => p.id === selectedProviderId.value) || PROVIDERS[0]
+const selectedProvider = computed(
+  () => PROVIDERS.find((p) => p.id === selectedProviderId.value) || PROVIDERS[0]
 )
 
-const availableModels = computed(() => 
-  selectedProvider.value?.models || []
-)
+const availableModels = computed(() => selectedProvider.value?.models || [])
 
 // 当选择服务商时更新表单
-watch(selectedProviderId, (providerId) => {
-  const provider = PROVIDERS.find(p => p.id === providerId)
-  if (provider) {
-    formData.value.baseUrl = provider.baseURL
-    formData.value.model = provider.models[0]?.value || ''
-  }
-}, { immediate: true })
+watch(
+  selectedProviderId,
+  (providerId) => {
+    const provider = PROVIDERS.find((p) => p.id === providerId)
+    if (provider) {
+      formData.value.baseUrl = provider.baseURL
+      formData.value.model = provider.models[0]?.value || ''
+    }
+  },
+  { immediate: true }
+)
 
 // 测试连接
 async function testConnection() {
@@ -47,7 +48,7 @@ async function testConnection() {
   try {
     const response = await fetch(`${formData.value.baseUrl}/models`, {
       headers: {
-        'Authorization': `Bearer ${formData.value.apiKey}`
+        Authorization: `Bearer ${formData.value.apiKey}`
       }
     })
 
@@ -55,15 +56,15 @@ async function testConnection() {
       testResult.value = { success: true, message: '连接成功！' }
     } else {
       const error = await response.json().catch(() => ({}))
-      testResult.value = { 
-        success: false, 
-        message: error.error?.message || `HTTP ${response.status}` 
+      testResult.value = {
+        success: false,
+        message: error.error?.message || `HTTP ${response.status}`
       }
     }
   } catch (error) {
-    testResult.value = { 
-      success: false, 
-      message: error instanceof Error ? error.message : '连接失败' 
+    testResult.value = {
+      success: false,
+      message: error instanceof Error ? error.message : '连接失败'
     }
   } finally {
     isTesting.value = false
@@ -130,7 +131,7 @@ function openDocs() {
       <!-- API 配置表单 -->
       <section class="settings-section">
         <h3>➕ 添加配置</h3>
-        
+
         <div class="config-form">
           <!-- 服务商选择 -->
           <div class="form-group">
@@ -141,11 +142,11 @@ function openDocs() {
                   {{ p.name }}
                 </option>
               </select>
-              <button 
-                v-if="selectedProvider.docs && selectedProvider.docs !== '#'" 
+              <button
+                v-if="selectedProvider.docs && selectedProvider.docs !== '#'"
                 class="docs-btn"
-                @click="openDocs"
                 title="查看文档"
+                @click="openDocs"
               >
                 📄
               </button>
@@ -156,9 +157,9 @@ function openDocs() {
           <!-- Base URL -->
           <div class="form-group">
             <label>Base URL</label>
-            <input 
+            <input
               v-model="formData.baseUrl"
-              type="text" 
+              type="text"
               class="form-input"
               placeholder="https://api.openai.com/v1"
             />
@@ -167,9 +168,9 @@ function openDocs() {
           <!-- API Key -->
           <div class="form-group">
             <label>API Key</label>
-            <input 
+            <input
               v-model="formData.apiKey"
-              type="password" 
+              type="password"
               class="form-input"
               placeholder="sk-..."
             />
@@ -178,39 +179,35 @@ function openDocs() {
           <!-- Model -->
           <div class="form-group">
             <label>模型</label>
-            <select 
-              v-if="availableModels.length > 0"
-              v-model="formData.model" 
-              class="form-select"
-            >
+            <select v-if="availableModels.length > 0" v-model="formData.model" class="form-select">
               <option v-for="m in availableModels" :key="m.value" :value="m.value">
                 {{ m.label }}
               </option>
             </select>
-            <input 
+            <input
               v-else
               v-model="formData.model"
-              type="text" 
+              type="text"
               class="form-input"
               placeholder="自定义模型名称"
             />
           </div>
 
           <!-- Test Result -->
-          <div v-if="testResult" class="test-result" :class="{ success: testResult.success, error: !testResult.success }">
+          <div
+            v-if="testResult"
+            class="test-result"
+            :class="{ success: testResult.success, error: !testResult.success }"
+          >
             {{ testResult.success ? '✅' : '❌' }} {{ testResult.message }}
           </div>
 
           <!-- Actions -->
           <div class="form-actions">
-            <button 
-              class="btn btn-secondary" 
-              :disabled="isTesting"
-              @click="testConnection"
-            >
+            <button class="btn btn-secondary" :disabled="isTesting" @click="testConnection">
               {{ isTesting ? '测试中...' : '🔗 测试连接' }}
             </button>
-            <button 
+            <button
               class="btn btn-primary"
               :disabled="!formData.apiKey || !formData.baseUrl || isSaving"
               @click="saveConfig"
@@ -224,15 +221,15 @@ function openDocs() {
       <!-- 已保存的配置 -->
       <section class="settings-section">
         <h3>📋 已保存配置</h3>
-        
+
         <div v-if="configStore.configs.length === 0" class="empty-configs">
           <span class="empty-icon">🔐</span>
           <p>暂无配置，请在左侧添加</p>
         </div>
 
         <div v-else class="config-list">
-          <div 
-            v-for="config in configStore.configs" 
+          <div
+            v-for="config in configStore.configs"
             :key="config.id"
             class="config-item"
             :class="{ active: config.id === configStore.activeConfigId }"
@@ -240,25 +237,23 @@ function openDocs() {
             <div class="config-info">
               <div class="config-header">
                 <span class="config-name">{{ config.providerName }}</span>
-                <span v-if="config.id === configStore.activeConfigId" class="active-badge">当前</span>
+                <span v-if="config.id === configStore.activeConfigId" class="active-badge"
+                  >当前</span
+                >
               </div>
               <span class="config-model">{{ config.selectedModel }}</span>
               <span class="config-url">{{ config.baseUrl }}</span>
             </div>
             <div class="config-actions">
-              <button 
+              <button
                 v-if="config.id !== configStore.activeConfigId"
                 class="action-btn activate"
-                @click="activateConfig(config.id)"
                 title="设为活跃"
+                @click="activateConfig(config.id)"
               >
                 ✓
               </button>
-              <button 
-                class="action-btn delete"
-                @click="deleteConfig(config.id)"
-                title="删除"
-              >
+              <button class="action-btn delete" title="删除" @click="deleteConfig(config.id)">
                 🗑️
               </button>
             </div>

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { marked } from 'marked'
 import Prism from 'prismjs'
 import 'prismjs/themes/prism-tomorrow.css'
 import 'prismjs/components/prism-typescript'
@@ -10,6 +9,8 @@ import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-bash'
 import FileActionPanel from './FileActionPanel.vue'
 import { speechService } from '@/services/speechService'
+import type { RAGCitation } from '@/services/ragService'
+import { renderSafeMarkdown } from '@/shared/services/markdown'
 
 interface MessageImage {
   url: string
@@ -21,11 +22,12 @@ const props = defineProps<{
   role: 'user' | 'assistant' | 'system'
   content: string
   images?: MessageImage[]
+  citations?: RAGCitation[]
 }>()
 
 const emit = defineEmits<{
-  'toolExecuted': [result: string]
-  'speak': [content: string]
+  toolExecuted: [result: string]
+  speak: [content: string]
 }>()
 
 // TTS 状态
@@ -34,11 +36,11 @@ const isSpeaking = ref(false)
 // Parse file-action blocks
 const fileActions = computed(() => {
   if (props.role !== 'assistant') return []
-  
+
   const regex = /```file-action\s*([\s\S]+?)```/gi
   const actions: any[] = []
   let match
-  
+
   while ((match = regex.exec(props.content)) !== null) {
     try {
       const payload = JSON.parse(match[1])
@@ -59,8 +61,7 @@ const cleanContent = computed(() => {
 })
 
 const renderedContent = computed(() => {
-  if (props.role === 'user') return props.content
-  return marked(cleanContent.value || '', { breaks: true, gfm: true })
+  return renderSafeMarkdown(cleanContent.value || '')
 })
 
 // 是否支持TTS
@@ -85,7 +86,7 @@ function toggleSpeak() {
       .replace(/#{1,6}\s+/g, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .trim()
-    
+
     speechService.speak(textContent, {
       onEnd: () => {
         isSpeaking.value = false
@@ -109,76 +110,85 @@ function closeImagePreview() {
   previewImage.value = null
 }
 
+async function copyContent() {
+  await window.navigator.clipboard.writeText(cleanContent.value)
+}
+
 onMounted(() => {
   Prism.highlightAll()
 })
 
-watch(() => renderedContent.value, () => {
-  if (props.role === 'assistant') {
-    setTimeout(() => Prism.highlightAll(), 0)
+watch(
+  () => renderedContent.value,
+  () => {
+    if (props.role === 'assistant') {
+      setTimeout(() => Prism.highlightAll(), 0)
+    }
   }
-})
+)
 </script>
 
 <template>
   <div class="message-bubble" :class="role">
-    <div class="avatar">{{ role === 'assistant' ? '🤖' : '👤' }}</div>
+    <div class="message-role">
+      {{ role === 'assistant' ? 'AI' : role === 'user' ? 'YOU' : 'SYS' }}
+    </div>
     <div class="message-wrapper">
       <!-- 附加的图片 -->
       <div v-if="images && images.length > 0" class="message-images">
-        <div 
-          v-for="(img, index) in images" 
+        <div
+          v-for="(img, index) in images"
           :key="index"
           class="image-thumb"
           @click="openImagePreview(img.url)"
         >
           <img :src="img.url" :alt="`附件 ${index + 1}`" />
-          <div class="image-overlay">
-            <span>🔍</span>
-          </div>
         </div>
       </div>
 
-      <div 
-        class="message-content markdown-body" 
-        v-html="role === 'user' ? content : renderedContent"
-      ></div>
-      
+      <div v-if="role === 'user'" class="message-content plain-text">
+        {{ content }}
+      </div>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div v-else class="message-content markdown-body" v-html="renderedContent"></div>
+
+      <div v-if="role === 'assistant' && citations?.length" class="citations">
+        <div class="citations-title">Sources</div>
+        <div
+          v-for="(citation, index) in citations"
+          :key="`${citation.source}-${index}`"
+          class="citation-card"
+        >
+          <div class="citation-path">{{ citation.relativePath || citation.source }}</div>
+          <p>{{ citation.snippet }}</p>
+        </div>
+      </div>
+
       <!-- File Action Tool Panel -->
-      <FileActionPanel 
-        v-if="fileActions.length > 0" 
-        :actions="fileActions" 
+      <FileActionPanel
+        v-if="fileActions.length > 0"
+        :actions="fileActions"
         @executed="handleToolExecuted"
       />
 
       <!-- 消息工具栏 -->
       <div v-if="role === 'assistant' && content.length > 0" class="message-actions">
-        <button 
+        <button
           v-if="supportsTTS"
           class="action-btn"
           :class="{ active: isSpeaking }"
           :title="isSpeaking ? '停止播放' : '朗读'"
           @click="toggleSpeak"
         >
-          {{ isSpeaking ? '⏹️' : '🔊' }}
+          {{ isSpeaking ? 'Stop' : 'Read' }}
         </button>
-        <button 
-          class="action-btn"
-          title="复制内容"
-          @click="navigator.clipboard.writeText(cleanContent)"
-        >
-          📋
-        </button>
+        <button class="action-btn" title="复制内容" @click="copyContent">Copy</button>
       </div>
     </div>
 
     <!-- 图片预览 Modal -->
     <Teleport to="body">
-      <div 
-        v-if="previewImage" 
-        class="image-preview-overlay"
-        @click="closeImagePreview"
-      >
+      <div v-if="previewImage" class="image-preview-overlay" @click="closeImagePreview">
         <div class="preview-container" @click.stop>
           <img :src="previewImage" alt="图片预览" />
           <button class="close-btn" @click="closeImagePreview">✕</button>
@@ -190,39 +200,28 @@ watch(() => renderedContent.value, () => {
 
 <style scoped>
 .message-bubble {
-  display: flex;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 12px;
-  max-width: 90%;
-  margin-bottom: 8px;
+  width: 100%;
+  margin-bottom: 18px;
 }
 
-.message-bubble.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.message-bubble.assistant {
-  align-self: flex-start;
-}
-
-.avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: white;
+.message-role {
   display: flex;
-  align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-  flex-shrink: 0;
+  padding-top: 13px;
+  color: var(--text-light);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .message-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: calc(100% - 48px);
+  gap: 8px;
+  min-width: 0;
 }
 
 /* ===== 图片附件区域 ===== */
@@ -235,18 +234,17 @@ watch(() => renderedContent.value, () => {
 
 .image-thumb {
   position: relative;
-  width: 120px;
-  height: 120px;
-  border-radius: 12px;
+  width: 128px;
+  height: 92px;
+  border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
-  border: 2px solid transparent;
+  border: 1px solid var(--border);
   transition: all 0.2s;
 }
 
 .image-thumb:hover {
   border-color: var(--primary);
-  transform: scale(1.02);
 }
 
 .image-thumb img {
@@ -255,70 +253,57 @@ watch(() => renderedContent.value, () => {
   object-fit: cover;
 }
 
-.image-thumb .image-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.image-thumb:hover .image-overlay {
-  opacity: 1;
-}
-
-.image-overlay span {
-  font-size: 1.5rem;
-}
-
 .message-content {
-  padding: 12px 16px;
-  border-radius: 18px;
-  font-size: 0.95rem;
+  max-width: 920px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
   line-height: 1.6;
   position: relative;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.plain-text {
+  white-space: pre-wrap;
 }
 
 .user .message-content {
-  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  color: white;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 10px 25px rgba(0, 122, 255, 0.2);
+  background: #eff6ff;
+  color: var(--text);
+  border-color: #bfdbfe;
 }
 
 .assistant .message-content {
-  background: white;
+  background: #ffffff;
   color: var(--text);
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.system .message-content {
+  background: #f8fafc;
+  color: var(--text-light);
 }
 
 /* ===== 消息工具栏 ===== */
 .message-actions {
   display: flex;
-  gap: 4px;
-  margin-top: 4px;
-  opacity: 0;
+  gap: 6px;
+  margin-top: -2px;
   transition: opacity 0.2s;
 }
 
-.message-bubble:hover .message-actions {
-  opacity: 1;
-}
-
 .action-btn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: var(--secondary);
+  height: 26px;
+  border: 1px solid var(--border);
+  background: #ffffff;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem;
+  padding: 0 9px;
+  color: var(--text-light);
+  font-size: 0.74rem;
+  font-weight: 650;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -326,12 +311,50 @@ watch(() => renderedContent.value, () => {
 }
 
 .action-btn:hover {
-  background: var(--border);
+  border-color: #9fb0c8;
+  color: var(--text);
 }
 
 .action-btn.active {
-  background: rgba(99, 102, 241, 0.2);
+  border-color: var(--primary);
+  background: var(--primary-light);
   color: var(--primary);
+}
+
+.citations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 920px;
+}
+
+.citations-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-light);
+  text-transform: uppercase;
+}
+
+.citation-card {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.citation-path {
+  font-family: Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  word-break: break-all;
+}
+
+.citation-card p {
+  margin: 6px 0 0;
+  color: var(--text-light);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 /* ===== 图片预览 Modal ===== */
@@ -385,15 +408,24 @@ watch(() => renderedContent.value, () => {
 }
 
 :deep(.markdown-body pre) {
-  background: #1e1e1e;
-  border-radius: 8px;
+  background: #0f172a;
+  border-radius: 6px;
   padding: 12px;
   margin: 12px 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
 :deep(.markdown-body code) {
   font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+:deep(.markdown-body pre code) {
+  display: block;
+  white-space: pre;
+  word-break: normal;
 }
 
 :deep(.markdown-body p) {
@@ -411,5 +443,12 @@ watch(() => renderedContent.value, () => {
   padding-left: 16px;
   color: var(--text-light);
   margin: 12px 0;
+}
+
+:deep(.markdown-body table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
 }
 </style>

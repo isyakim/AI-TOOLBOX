@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useChatStore } from '@/stores'
+import { useChatStore } from '@/stores/chat'
 
 const chatStore = useChatStore()
 
@@ -8,26 +7,23 @@ function createSession() {
   chatStore.createSession()
 }
 
-function handleSearch(e: Event) {
-  const value = (e.target as HTMLInputElement).value
-  chatStore.setSearchKeyword(value)
+function handleSearch(event: Event) {
+  chatStore.setSearchKeyword((event.target as HTMLInputElement).value)
 }
 
 function formatTime(timestamp: number): string {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  const diff = Date.now() - timestamp
   const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  return date.toLocaleDateString('zh-CN')
+  if (hours < 24) return `${hours}h`
+  return new Date(timestamp).toLocaleDateString()
 }
 
-function deleteSession(id: string, e: Event) {
-  e.stopPropagation()
-  if (confirm('确定要删除这个会话吗？')) {
+function deleteSession(id: string, event: Event) {
+  event.stopPropagation()
+  if (confirm('Delete this session?')) {
     chatStore.deleteSession(id)
   }
 }
@@ -36,50 +32,41 @@ function deleteSession(id: string, e: Event) {
 <template>
   <aside class="session-panel">
     <div class="panel-header">
-      <div class="header-text">
-        <span class="eyebrow">会话集</span>
-        <h3>全部对话</h3>
+      <div>
+        <h2>Sessions</h2>
+        <p>{{ chatStore.filteredSessions.length }} conversations</p>
       </div>
-      <button class="add-btn" @click="createSession" title="新建会话">
-        ＋
-      </button>
+      <button class="new-btn" title="New session" @click="createSession">New</button>
     </div>
 
     <div class="search-box">
-      <span class="search-icon">🔍</span>
-      <input 
-        type="text" 
-        placeholder="搜索会话或关键字..."
+      <input
+        type="text"
+        placeholder="Search sessions"
         :value="chatStore.searchKeyword"
         @input="handleSearch"
       />
     </div>
 
     <div class="session-list">
-      <div 
-        v-for="session in chatStore.filteredSessions" 
+      <button
+        v-for="session in chatStore.filteredSessions"
         :key="session.id"
         class="session-item"
         :class="{ active: session.id === chatStore.activeSessionId }"
         @click="chatStore.switchSession(session.id)"
       >
-        <div class="session-content">
-          <span class="session-title">{{ session.title }}</span>
-          <span class="session-meta">
-            {{ session.messages.length }} 条 · {{ formatTime(session.updatedAt) }}
-          </span>
-        </div>
-        <button 
-          class="delete-btn"
-          @click="deleteSession(session.id, $event)"
-          title="删除会话"
+        <span class="session-title">{{ session.title }}</span>
+        <span class="session-meta">
+          {{ session.messages.length }} messages · {{ formatTime(session.updatedAt) }}
+        </span>
+        <span class="delete-btn" title="Delete session" @click="deleteSession(session.id, $event)"
+          >Delete</span
         >
-          🗑️
-        </button>
-      </div>
+      </button>
 
       <div v-if="chatStore.filteredSessions.length === 0" class="empty-list">
-        {{ chatStore.searchKeyword ? '未找到匹配的会话' : '暂无会话' }}
+        No sessions found.
       </div>
     </div>
   </aside>
@@ -88,155 +75,134 @@ function deleteSession(id: string, e: Event) {
 <style scoped>
 .session-panel {
   display: flex;
-  flex-direction: column;
   height: 100%;
-  padding: var(--space-md);
+  min-height: 0;
+  flex-direction: column;
 }
 
 .panel-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-md);
-}
-
-.header-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.eyebrow {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-light);
-}
-
-.panel-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.add-btn {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--border);
-  background: var(--primary);
-  color: white;
-  border-radius: var(--radius-sm);
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-.add-btn:hover {
-  transform: scale(1.05);
+.panel-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.panel-header p {
+  margin: 2px 0 0;
+  color: var(--text-light);
+  font-size: 0.74rem;
+}
+
+.new-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 650;
 }
 
 .search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
-  margin-bottom: var(--space-md);
-}
-
-.search-icon {
-  font-size: 0.9rem;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 .search-box input {
-  border: none;
-  flex: 1;
-  font-size: 0.9rem;
-  background: transparent;
-}
-
-.search-box input:focus {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--text);
   outline: none;
 }
 
+.search-box input:focus {
+  border-color: var(--primary);
+}
+
 .session-list {
-  flex: 1;
-  overflow-y: auto;
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 8px;
 }
 
 .session-item {
+  position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  background: white;
+  width: 100%;
+  min-height: 58px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  text-align: left;
 }
 
 .session-item:hover {
+  background: #ffffff;
   border-color: var(--border);
 }
 
 .session-item.active {
-  background: rgba(0, 122, 255, 0.08);
-  border-color: var(--primary);
-}
-
-.session-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
 
 .session-title {
-  font-weight: 500;
-  font-size: 0.95rem;
-  white-space: nowrap;
+  width: 100%;
   overflow: hidden;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 650;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-meta {
-  font-size: 0.75rem;
   color: var(--text-light);
+  font-size: 0.72rem;
 }
 
 .delete-btn {
-  opacity: 0;
-  background: transparent;
-  border: none;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.15s;
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  display: none;
+  color: var(--error);
+  font-size: 0.7rem;
 }
 
 .session-item:hover .delete-btn {
-  opacity: 1;
-}
-
-.delete-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
+  display: inline;
 }
 
 .empty-list {
-  text-align: center;
-  padding: 40px 20px;
+  padding: 24px 10px;
   color: var(--text-light);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  text-align: center;
 }
 </style>

@@ -1,186 +1,57 @@
-# AI Toolbox - 多平台自动构建与发布
-# 支持 macOS (arm64/x64), Windows, Linux
-
-name: Build & Release
+name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g., 1.0.0)'
-        required: false
-        default: ''
 
-env:
-  NODE_VERSION: '20'
+permissions:
+  contents: write
 
 jobs:
-  # ===== macOS ARM64 构建 =====
-  build-macos-arm64:
-    runs-on: macos-14
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            command: build:win
+            artifact: windows
+            files: dist/**/*
+          - os: macos-latest
+            command: build:mac
+            artifact: macos
+            files: dist/**/*
+          - os: ubuntu-latest
+            command: build:linux
+            artifact: linux
+            files: dist/**/*
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Electron app
-        run: npm run build:mac
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run ${{ matrix.command }}
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: macos-arm64
-          path: |
-            dist/*.dmg
-            dist/*.zip
-          retention-days: 30
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
 
-  # ===== macOS x64 构建 =====
-  build-macos-x64:
-    runs-on: macos-13
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Electron app
-        run: npm run build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-x64
-          path: |
-            dist/*.dmg
-            dist/*.zip
-          retention-days: 30
-
-  # ===== Windows 构建 =====
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Electron app
-        run: npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: |
-            dist/*.exe
-            dist/*.msi
-          retention-days: 30
-
-  # ===== Linux 构建 =====
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Electron app
-        run: npm run build:linux
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-            dist/*.rpm
-          retention-days: 30
-
-  # ===== 发布 Release =====
   release:
-    needs: [build-macos-arm64, build-macos-x64, build-windows, build-linux]
-    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
+    needs: package
+    runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - uses: softprops/action-gh-release@v2
         with:
-          draft: false
-          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
-          files: |
-            artifacts/macos-arm64/*
-            artifacts/macos-x64/*
-            artifacts/windows/*
-            artifacts/linux/*
           generate_release_notes: true
-          body: |
-            ## 🚀 AI Toolbox ${{ github.ref_name }}
-            
-            ### 📦 下载安装包
-            
-            | 平台 | 架构 | 文件 |
-            |------|------|------|
-            | macOS | Apple Silicon (M1/M2/M3) | `.dmg` |
-            | macOS | Intel | `.dmg` |
-            | Windows | x64 | `.exe` / `.msi` |
-            | Linux | x64 | `.AppImage` / `.deb` / `.rpm` |
-            
-            ### ✨ 更新内容
-            
-            详见下方自动生成的更新日志。
-            
-            ---
-            
-            💡 **提示**: 首次运行可能需要允许来自未知开发者的应用。
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: artifacts/**/*

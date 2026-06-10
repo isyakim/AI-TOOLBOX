@@ -1,0 +1,23 @@
+{
+  "id": "test-case-generator",
+  "name": "Test Case Generator",
+  "icon": "DEV",
+  "description": "Generate focused tests from code or requirements.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Design high-signal tests covering happy paths, edge cases, failures, regressions, and mocks.",
+  "fields": [
+    {
+      "id": "subject",
+      "label": "Code or requirement",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

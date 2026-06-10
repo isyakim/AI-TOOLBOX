@@ -3,12 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { 
-  fileToBase64, 
-  getImageDimensions, 
-  isValidImageType,
-  buildVisionContent
-} from '@/utils/imageUtils'
+import { fileToBase64, isValidImageType, buildVisionContent } from '@/utils/imageUtils'
 
 describe('Image Utils', () => {
   beforeEach(() => {
@@ -33,18 +28,26 @@ describe('Image Utils', () => {
   describe('buildVisionContent', () => {
     it('should build text-only content when no images', () => {
       const content = buildVisionContent('Hello', [])
-      
+
       expect(content).toHaveLength(1)
       expect(content[0]).toEqual({ type: 'text', text: 'Hello' })
     })
 
     it('should build content with text and images', () => {
       const images = [
-        { url: 'blob://1', base64: 'abc123', type: 'image/jpeg', file: null as any, width: 100, height: 100, size: 1000 }
+        {
+          url: 'blob://1',
+          base64: 'abc123',
+          type: 'image/jpeg',
+          file: null as any,
+          width: 100,
+          height: 100,
+          size: 1000
+        }
       ]
-      
+
       const content = buildVisionContent('Describe this', images)
-      
+
       expect(content).toHaveLength(2)
       expect(content[0]).toEqual({ type: 'text', text: 'Describe this' })
       expect(content[1].type).toBe('image_url')
@@ -53,12 +56,28 @@ describe('Image Utils', () => {
 
     it('should handle multiple images', () => {
       const images = [
-        { url: 'blob://1', base64: 'abc', type: 'image/jpeg', file: null as any, width: 100, height: 100, size: 1000 },
-        { url: 'blob://2', base64: 'def', type: 'image/png', file: null as any, width: 200, height: 200, size: 2000 }
+        {
+          url: 'blob://1',
+          base64: 'abc',
+          type: 'image/jpeg',
+          file: null as any,
+          width: 100,
+          height: 100,
+          size: 1000
+        },
+        {
+          url: 'blob://2',
+          base64: 'def',
+          type: 'image/png',
+          file: null as any,
+          width: 200,
+          height: 200,
+          size: 2000
+        }
       ]
-      
+
       const content = buildVisionContent('Compare', images)
-      
+
       expect(content).toHaveLength(3) // 1 text + 2 images
     })
   })
@@ -67,7 +86,7 @@ describe('Image Utils', () => {
     it('should convert file to base64', async () => {
       // Create a mock file
       const mockFile = new File(['test content'], 'test.txt', { type: 'text/plain' })
-      
+
       // Mock FileReader
       const mockReadAsDataURL = vi.fn()
       const mockFileReader = {
@@ -76,18 +95,18 @@ describe('Image Utils', () => {
         onload: null as any,
         onerror: null as any
       }
-      
+
       vi.spyOn(global, 'FileReader').mockImplementation(() => mockFileReader as any)
-      
+
       // Trigger the promise
       const promise = fileToBase64(mockFile)
-      
+
       // Simulate successful read
       setTimeout(() => {
         mockFileReader.onload?.()
       }, 0)
-      
-      const result = await promise
+
+      await promise
       expect(mockReadAsDataURL).toHaveBeenCalledWith(mockFile)
     })
   })

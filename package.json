@@ -1,13 +1,13 @@
 {
   "name": "ai-toolbox",
   "version": "2.0.0",
-  "description": "AI Toolbox - 功能强大的桌面AI助手应用",
+  "description": "AI Toolbox - a local-first AI agent workbench for developers",
   "main": "./out/main/index.js",
-  "author": "xKim",
-  "homepage": "https://github.com/xKim/ai-toolbox",
+  "author": "isyakim",
+  "homepage": "https://github.com/isyakim/AI-TOOLBOX",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xKim/ai-toolbox.git"
+    "url": "https://github.com/isyakim/AI-TOOLBOX.git"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -17,13 +17,16 @@
     "build:win": "electron-vite build && electron-builder --win",
     "build:linux": "electron-vite build && electron-builder --linux",
     "preview": "electron-vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx --fix",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "vue-tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:unit:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "test:e2e:ui": "playwright test --ui",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -31,6 +34,8 @@
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
     "@lancedb/lancedb": "^0.23.0",
+    "diff": "^7.0.0",
+    "electron-log": "^5.4.4",
     "electron-updater": "^6.1.7",
     "mammoth": "^1.11.0",
     "marked": "^15.0.12",
@@ -45,6 +50,7 @@
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@playwright/test": "^1.41.0",
     "@rushstack/eslint-patch": "^1.10.4",
+    "@types/diff": "^7.0.0",
     "@types/node": "^20.17.19",
     "@types/prismjs": "^1.26.5",
     "@vitejs/plugin-vue": "^5.2.1",
@@ -64,25 +70,21 @@
     "vue-tsc": "^2.2.2"
   },
   "build": {
-    "appId": "com.xkim.ai-toolbox",
+    "appId": "com.isyakim.ai-toolbox",
     "productName": "AI Toolbox",
-    "directories": {
-      "buildResources": "build"
-    },
     "files": [
       "out/**/*"
     ],
     "publish": {
       "provider": "github",
-      "owner": "xKim",
-      "repo": "ai-toolbox"
+      "owner": "isyakim",
+      "repo": "AI-TOOLBOX"
     },
     "mac": {
       "target": [
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools"
     },
     "win": {
@@ -90,7 +92,7 @@
         "nsis",
         "zip"
       ],
-      "icon": "build/icon.ico"
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "linux": {
       "target": [
@@ -98,7 +100,6 @@
         "deb",
         "rpm"
       ],
-      "icon": "build/icon.png",
       "category": "Development"
     },
     "nsis": {

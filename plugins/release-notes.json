@@ -1,0 +1,23 @@
+{
+  "id": "release-notes",
+  "name": "Release Notes",
+  "icon": "DEV",
+  "description": "Generate user-facing release notes from changes.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Group changes into Added, Changed, Fixed, Security, and Migration Notes.",
+  "fields": [
+    {
+      "id": "changes",
+      "label": "Commits, PRs, or diff",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

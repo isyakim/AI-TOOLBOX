@@ -1,0 +1,23 @@
+{
+  "id": "pr-review",
+  "name": "PR Review",
+  "icon": "DEV",
+  "description": "Review pull request diffs for bugs, regressions, security risks, and missing tests.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Act as a senior code reviewer. Return findings first, ordered by severity, with file references and concrete fixes.",
+  "fields": [
+    {
+      "id": "diff",
+      "label": "PR diff",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

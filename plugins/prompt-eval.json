@@ -1,0 +1,23 @@
+{
+  "id": "prompt-eval",
+  "name": "Prompt Eval",
+  "icon": "DEV",
+  "description": "Evaluate ambiguity, constraints, and output quality.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Score the prompt, identify ambiguity and failure modes, propose evaluation cases, and return an improved prompt.",
+  "fields": [
+    {
+      "id": "prompt",
+      "label": "Prompt",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

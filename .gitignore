@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 
 # Build outputs
@@ -41,6 +40,10 @@ desktop.ini
 .cache/
 .npm/
 .eslintcache
+*.tsbuildinfo
+playwright-report/
+test-results/
+coverage/
 
 # Temporary files
 tmp/

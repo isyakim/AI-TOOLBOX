@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import MessageBubble from './MessageBubble.vue'
 import type { MessageImage } from '@/stores/chat'
+import type { RAGCitation } from '@/services/ragService'
 
 interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   images?: MessageImage[]
+  citations?: RAGCitation[]
 }
 
 defineProps<{
@@ -14,8 +16,8 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'toolExecuted': [result: string]
-  'speak': [content: string]
+  toolExecuted: [result: string]
+  speak: [content: string]
 }>()
 </script>
 
@@ -27,6 +29,7 @@ const emit = defineEmits<{
       :role="msg.role"
       :content="msg.content"
       :images="msg.images"
+      :citations="msg.citations"
       @tool-executed="(res) => emit('toolExecuted', res)"
       @speak="(content) => emit('speak', content)"
     />

@@ -1,0 +1,23 @@
+{
+  "id": "bug-repro-writer",
+  "name": "Bug Repro Writer",
+  "icon": "DEV",
+  "description": "Turn rough bug notes into a reproducible issue.",
+  "author": "AI Toolbox",
+  "version": "1.0.0",
+  "category": "coding",
+  "permissions": ["ai:chat", "chat:context"],
+  "systemPrompt": "Produce minimal reproduction steps, expected and actual behavior, environment, diagnostics, and missing information.",
+  "fields": [
+    {
+      "id": "bug",
+      "label": "Bug details",
+      "type": "textarea",
+      "rows": 10,
+      "required": true
+    }
+  ],
+  "tags": ["developer"],
+  "createdAt": "2026-05-15T00:00:00.000Z",
+  "updatedAt": "2026-05-15T00:00:00.000Z"
+}

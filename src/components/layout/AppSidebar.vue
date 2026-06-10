@@ -1,29 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useThemeStore } from '@/stores'
 
 const router = useRouter()
 const route = useRoute()
-const themeStore = useThemeStore()
 
 interface NavItem {
   path: string
-  name: string
-  icon: string
   title: string
-  featured?: boolean
+  key: string
 }
 
 const navItems: NavItem[] = [
-  { path: '/chat', name: 'Chat', icon: '💬', title: '智能对话' },
-  { path: '/tools', name: 'Tools', icon: '🛠️', title: 'AI工具集' },
-  { path: '/ui-architect', name: 'UIArchitect', icon: '🏗️', title: 'UI架构师', featured: true },
-  { path: '/plugins', name: 'Plugins', icon: '🧩', title: '插件中心' },
-  { path: '/knowledge', name: 'Knowledge', icon: '📂', title: '知识库' },
-  { path: '/theme', name: 'Theme', icon: '🎨', title: '主题引擎', featured: true },
-  { path: '/settings', name: 'Settings', icon: '⚙️', title: '设置' },
-  { path: '/about', name: 'About', icon: '📝', title: '关于' }
+  { path: '/chat', title: 'Chat', key: '⌘' },
+  { path: '/knowledge', title: 'Knowledge', key: 'KB' },
+  { path: '/plugins', title: 'Plugins', key: 'PL' },
+  { path: '/settings', title: 'Settings', key: 'CFG' },
+  { path: '/about', title: 'About', key: 'i' }
 ]
 
 const isActive = (path: string) => route.path === path
@@ -35,173 +27,150 @@ function navigateTo(path: string) {
 
 <template>
   <aside class="sidebar">
-    <!-- Logo -->
-    <div class="logo">
-      <h1>AI工具箱</h1>
+    <div class="brand">
+      <div class="brand-mark">AI</div>
+      <div>
+        <h1>AI Toolbox</h1>
+        <p>Developer Workbench</p>
+      </div>
     </div>
 
-    <!-- Navigation -->
-    <nav class="nav-section">
-      <a
+    <nav class="nav-section" aria-label="Primary">
+      <button
         v-for="item in navItems"
         :key="item.path"
         class="nav-item"
-        :class="{ active: isActive(item.path), featured: item.featured }"
-        :title="item.title"
+        :class="{ active: isActive(item.path) }"
         @click="navigateTo(item.path)"
       >
-        <span class="nav-icon">{{ item.icon }}</span>
+        <span class="nav-key">{{ item.key }}</span>
         <span class="nav-text">{{ item.title }}</span>
-        <span v-if="item.featured && !isActive(item.path)" class="featured-badge">NEW</span>
-      </a>
+      </button>
     </nav>
 
-    <!-- Theme Selector -->
-    <div class="theme-section">
-      <span class="theme-label">🎨 主题配色</span>
-      <select 
-        class="theme-select"
-        :value="themeStore.currentTheme"
-        @change="(e) => themeStore.setTheme((e.target as HTMLSelectElement).value as any)"
-      >
-        <option 
-          v-for="theme in themeStore.themes" 
-          :key="theme.id" 
-          :value="theme.id"
-        >
-          {{ theme.icon }} {{ theme.name }}
-        </option>
-      </select>
+    <div class="sidebar-footer">
+      <span class="footer-label">Local-first</span>
+      <span class="footer-copy">RAG · Plugins · File diff approval</span>
     </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 200px;
-  height: 100vh;
   position: fixed;
-  left: 0;
-  top: 0;
-  background: rgba(255, 255, 255, 0.92);
-  border-right: 1px solid rgba(0, 0, 0, 0.04);
+  inset: 0 auto 0 0;
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  padding: var(--space-xl) var(--space-md);
-  gap: var(--space-lg);
-  z-index: 100;
-  overflow-y: auto;
+  width: 232px;
+  padding: 16px 12px;
+  background: #101827;
+  border-right: 1px solid #1f2937;
+  color: #d1d5db;
 }
 
-.logo {
-  text-align: center;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.logo h1 {
-  font-size: 1.35rem;
-  color: var(--primary);
+.brand-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  background: #172033;
+  color: #f9fafb;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.8rem;
   font-weight: 700;
+}
+
+.brand h1 {
   margin: 0;
+  color: #f9fafb;
+  font-size: 0.96rem;
+  font-weight: 650;
+}
+
+.brand p {
+  margin: 1px 0 0;
+  color: #8b97aa;
+  font-size: 0.74rem;
 }
 
 .nav-section {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
   flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 14px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #b8c1d1;
   cursor: pointer;
-  transition: all 0.2s;
-  color: var(--text);
-  text-decoration: none;
-  border-radius: var(--radius-md);
-  gap: 12px;
+  text-align: left;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: #172033;
+  color: #f9fafb;
 }
 
 .nav-item.active {
-  background: var(--primary);
-  color: #fff;
-  box-shadow: 0 12px 20px rgba(0, 122, 255, 0.2);
+  background: #1d4ed8;
+  color: #ffffff;
 }
 
-.nav-icon {
-  font-size: 1.25rem;
+.nav-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.68rem;
+  color: inherit;
+  opacity: 0.9;
 }
 
 .nav-text {
-  font-size: 0.95rem;
-  font-weight: 500;
+  font-weight: 560;
 }
 
-.theme-section {
-  padding-top: var(--space-md);
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+.sidebar-footer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: 4px;
+  padding: 12px 8px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.theme-label {
-  font-size: 0.85rem;
-  color: var(--text-light);
+.footer-label {
+  color: #f9fafb;
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
-.theme-select {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: var(--secondary);
-  color: var(--text);
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.theme-select:focus {
-  outline: none;
-  border-color: var(--primary);
-}
-
-/* Featured nav item */
-.nav-item.featured {
-  position: relative;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.08));
-  border: 1px solid rgba(99, 102, 241, 0.2);
-}
-
-.nav-item.featured:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.15));
-  border-color: rgba(99, 102, 241, 0.4);
-}
-
-.nav-item.featured.active {
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  border-color: transparent;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
-}
-
-.featured-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  background: linear-gradient(135deg, #f472b6, #ec4899);
-  color: white;
-  border-radius: 8px;
-  margin-left: auto;
-  animation: pulse-badge 2s ease-in-out infinite;
-}
-
-@keyframes pulse-badge {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(0.95); }
+.footer-copy {
+  color: #8b97aa;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 </style>

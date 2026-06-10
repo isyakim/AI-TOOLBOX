@@ -14,6 +14,19 @@ export interface DocumentChunk {
   }
 }
 
+export interface RAGCitation {
+  source: string
+  path?: string
+  relativePath?: string
+  snippet: string
+  score?: number
+}
+
+export interface ProjectIndexOptions {
+  rootPath: string
+  extensions: string[]
+}
+
 export class RAGService {
   /**
    * 将文档解析并切片
@@ -25,10 +38,10 @@ export class RAGService {
     if (extension === 'md' || extension === 'txt') {
       text = await file.text()
     } else if (extension === 'pdf') {
-       // PDF 解析通常在渲染进程较重，但为了简单这里先做占位处理
-       // 实际生产中可能需要调用主进程的 pdf-parse
-       // 这里我们先假设通过 FileReader 读取 arrayBuffer
-       text = "PDF Content Placeholder (需要集成 pdf-parse)"
+      // PDF 解析通常在渲染进程较重，但为了简单这里先做占位处理
+      // 实际生产中可能需要调用主进程的 pdf-parse
+      // 这里我们先假设通过 FileReader 读取 arrayBuffer
+      text = 'PDF Content Placeholder (需要集成 pdf-parse)'
     } else {
       throw new Error(`不支持的文件格式: ${extension}`)
     }
@@ -39,20 +52,25 @@ export class RAGService {
   /**
    * 文本切片逻辑 (递归字符切片模拟)
    */
-  private static chunkText(text: string, source: string, chunkSize = 800, overlap = 100): DocumentChunk[] {
+  private static chunkText(
+    text: string,
+    source: string,
+    chunkSize = 800,
+    overlap = 100
+  ): DocumentChunk[] {
     const chunks: DocumentChunk[] = []
     let start = 0
 
     while (start < text.length) {
       const end = Math.min(start + chunkSize, text.length)
-      let chunk = text.slice(start, end)
-      
+      const chunk = text.slice(start, end)
+
       chunks.push({
         text: chunk,
         metadata: { source }
       })
 
-      start += (chunkSize - overlap)
+      start += chunkSize - overlap
     }
 
     return chunks
@@ -83,13 +101,14 @@ export class RAGService {
 
     // 1. 解析切片
     const chunks = await this.parseAndChunk(file)
-    
+
     // 2. 调用主进程注入
     return await window.api.ragIngest({
       chunks,
       config: {
         apiKey: activeConfig.apiKey,
-        baseUrl: activeConfig.baseUrl
+        baseUrl: activeConfig.baseUrl,
+        model: activeConfig.selectedModel
       }
     })
   }
@@ -107,8 +126,45 @@ export class RAGService {
       limit,
       config: {
         apiKey: activeConfig.apiKey,
-        baseUrl: activeConfig.baseUrl
+        baseUrl: activeConfig.baseUrl,
+        model: activeConfig.selectedModel
       }
     })
+  }
+
+  static async indexProject(options: ProjectIndexOptions) {
+    const configStore = useConfigStore()
+    const activeConfig = configStore.activeConfig
+    if (!activeConfig) throw new Error('未激活 API 配置')
+
+    return await window.api.ragIndexProject({
+      rootPath: options.rootPath,
+      extensions: options.extensions,
+      config: {
+        apiKey: activeConfig.apiKey,
+        baseUrl: activeConfig.baseUrl,
+        model: activeConfig.selectedModel
+      }
+    })
+  }
+
+  static async getIndexStatus() {
+    return await window.api.ragIndexStatus()
+  }
+
+  static async runProjectHealthCheck(rootPath: string) {
+    return await window.api.projectHealthCheck({ rootPath })
+  }
+
+  static mapResultsToCitations(results: any[] = []): RAGCitation[] {
+    return results
+      .filter((result) => result?.metadata?.source !== 'system')
+      .map((result) => ({
+        source: result.metadata?.relativePath || result.metadata?.source || 'unknown',
+        path: result.metadata?.path,
+        relativePath: result.metadata?.relativePath,
+        snippet: result.metadata?.snippet || result.text?.slice(0, 360) || '',
+        score: result._distance
+      }))
   }
 }

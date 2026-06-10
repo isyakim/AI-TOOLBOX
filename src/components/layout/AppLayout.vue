@@ -2,15 +2,13 @@
 import { onMounted } from 'vue'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
-import { useThemeStore, useConfigStore, useChatStore } from '@/stores'
+import { useConfigStore, useChatStore } from '@/stores'
 
-const themeStore = useThemeStore()
 const configStore = useConfigStore()
 const chatStore = useChatStore()
 
-onMounted(() => {
-  themeStore.initTheme()
-  configStore.loadFromStorage()
+onMounted(async () => {
+  await configStore.loadFromStorage()
   chatStore.loadFromStorage()
 })
 </script>
@@ -33,7 +31,7 @@ onMounted(() => {
 .app-container {
   display: flex;
   height: 100vh;
-  background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  background: #f3f4f6;
 }
 
 .app-shell {
@@ -47,15 +45,14 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: var(--space-xl);
-  gap: var(--space-lg);
-  margin-left: 200px;
-  transition: margin-left 0.3s ease;
+  padding: 0;
+  margin-left: 232px;
 }
 
 .content-area {
   flex: 1;
-  overflow-y: auto;
-  border-radius: var(--radius-lg);
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px;
 }
 </style>
