@@ -113,7 +113,8 @@ export async function saveProvider(input: ProviderSaveInput): Promise<ProviderPu
   const state = await readStoredState()
   const credentials = await readCredentials()
   const id = input.id || crypto.randomUUID()
-  if (input.apiKey?.trim()) credentials[id] = input.apiKey.trim()
+  const credential = input.apiKey?.trim()
+  if (credential) credentials[id] = credential
 
   const config: ProviderPublicConfig = {
     id,
@@ -133,17 +134,20 @@ export async function saveProvider(input: ProviderSaveInput): Promise<ProviderPu
   if (index >= 0) state.configs[index] = config
   else state.configs.push(config)
   state.activeConfigId ||= id
-  await Promise.all([writeStoredState(state), writeCredentials(credentials)])
+  await writeStoredState(state)
+  if (credential) await writeCredentials(credentials)
   return config
 }
 
 export async function deleteProvider(id: string): Promise<ProviderState> {
   const state = await readStoredState()
   const credentials = await readCredentials()
+  const hadCredential = Object.prototype.hasOwnProperty.call(credentials, id)
   state.configs = state.configs.filter((item) => item.id !== id)
   delete credentials[id]
   if (state.activeConfigId === id) state.activeConfigId = state.configs[0]?.id || null
-  await Promise.all([writeStoredState(state), writeCredentials(credentials)])
+  await writeStoredState(state)
+  if (hadCredential) await writeCredentials(credentials)
   return state
 }
 
