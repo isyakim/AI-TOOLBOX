@@ -4,6 +4,7 @@ import {
   saveChatSnapshot,
   type ChatSnapshot
 } from '@/features/chat/repositories/chatRepository'
+import { DEFAULT_CHAT_SETTINGS } from '@/features/chat/types'
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>()
@@ -34,11 +35,7 @@ class MemoryStorage implements Storage {
 }
 
 const defaults = {
-  temperature: 0.7,
-  contextLength: 10,
-  enableStream: true,
-  enableMemory: true,
-  useRAG: false
+  ...DEFAULT_CHAT_SETTINGS
 }
 
 const options = {
@@ -51,7 +48,7 @@ describe('chatRepository', () => {
   it('round-trips a versioned snapshot', () => {
     const storage = new MemoryStorage()
     const snapshot: ChatSnapshot = {
-      version: 1,
+      version: 2,
       sessions: [],
       activeSessionId: null,
       currentRoleId: 'roo-coder',
@@ -68,7 +65,7 @@ describe('chatRepository', () => {
     storage.setItem(
       'ai-toolbox-chat',
       JSON.stringify({
-        version: 1,
+        version: 2,
         sessions: [{ id: 1 }],
         activeSessionId: 'missing',
         currentRoleId: 'unknown',
@@ -77,7 +74,7 @@ describe('chatRepository', () => {
     )
 
     expect(loadChatSnapshot(options, storage)).toEqual({
-      version: 1,
+      version: 2,
       sessions: [],
       activeSessionId: null,
       currentRoleId: 'roo-helper',
@@ -97,5 +94,25 @@ describe('chatRepository', () => {
     expect(snapshot?.settings.useRAG).toBe(true)
     expect(storage.getItem('ai-toolbox-chat')).not.toBeNull()
     expect(storage.getItem('ai-toolbox-chat-settings')).toBeNull()
+  })
+
+  it('upgrades a v1 snapshot and drops the obsolete stream preference', () => {
+    const storage = new MemoryStorage()
+    storage.setItem(
+      'ai-toolbox-chat',
+      JSON.stringify({
+        version: 1,
+        sessions: [],
+        activeSessionId: null,
+        currentRoleId: 'roo-helper',
+        settings: { ...defaults, enableStream: false }
+      })
+    )
+
+    const snapshot = loadChatSnapshot(options, storage)
+
+    expect(snapshot?.version).toBe(2)
+    expect(snapshot?.settings).toEqual(defaults)
+    expect(JSON.parse(storage.getItem('ai-toolbox-chat') || '{}').version).toBe(2)
   })
 })

@@ -1,24 +1,11 @@
-/**
- * 自动更新服务
- * 使用 electron-updater 实现静默差量更新
- */
-
-import { autoUpdater } from 'electron-updater'
-import { BrowserWindow, ipcMain, app } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import log from 'electron-log'
-
-// 配置日志
-autoUpdater.logger = log
-log.transports.file.level = 'info'
-
-// 配置更新选项
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
+import { autoUpdater } from 'electron-updater'
 
 export interface UpdateInfo {
   version: string
-  releaseDate: string
-  releaseNotes: string
+  releaseDate?: string
+  releaseNotes?: unknown
 }
 
 export interface UpdateProgress {
@@ -28,45 +15,47 @@ export interface UpdateProgress {
   total: number
 }
 
+type UpdateEvent =
+  | 'update-error'
+  | 'checking-for-update'
+  | 'update-available'
+  | 'update-not-available'
+  | 'download-progress'
+  | 'update-downloaded'
+
 let mainWindow: BrowserWindow | null = null
+let handlersRegistered = false
 
-/**
- * 初始化自动更新
- */
-export function initAutoUpdater(window: BrowserWindow) {
+autoUpdater.logger = log
+log.transports.file.level = 'info'
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+export function initAutoUpdater(window: BrowserWindow): void {
   mainWindow = window
+  if (handlersRegistered) return
+  handlersRegistered = true
 
-  // 检查更新错误
   autoUpdater.on('error', (error) => {
     log.error('Update error:', error)
     sendUpdateMessage('update-error', error.message)
   })
-
-  // 检查更新中
   autoUpdater.on('checking-for-update', () => {
     log.info('Checking for updates...')
     sendUpdateMessage('checking-for-update')
   })
-
-  // 有可用更新
   autoUpdater.on('update-available', (info) => {
     log.info('Update available:', info.version)
     sendUpdateMessage('update-available', {
       version: info.version,
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes
-    })
+    } satisfies UpdateInfo)
   })
-
-  // 没有可用更新
   autoUpdater.on('update-not-available', (info) => {
-    log.info('Update not available, current version is latest')
-    sendUpdateMessage('update-not-available', {
-      version: info.version
-    })
+    log.info('No update available:', info.version)
+    sendUpdateMessage('update-not-available', { version: info.version })
   })
-
-  // 下载进度
   autoUpdater.on('download-progress', (progress) => {
     log.info(`Download progress: ${progress.percent.toFixed(2)}%`)
     sendUpdateMessage('download-progress', {
@@ -74,83 +63,61 @@ export function initAutoUpdater(window: BrowserWindow) {
       percent: progress.percent,
       transferred: progress.transferred,
       total: progress.total
-    })
+    } satisfies UpdateProgress)
   })
-
-  // 下载完成
   autoUpdater.on('update-downloaded', (info) => {
     log.info('Update downloaded:', info.version)
     sendUpdateMessage('update-downloaded', {
       version: info.version,
       releaseNotes: info.releaseNotes
-    })
+    } satisfies UpdateInfo)
   })
 
-  // 设置 IPC 处理器
   setupIpcHandlers()
 }
 
-/**
- * 发送更新消息到渲染进程
- */
-function sendUpdateMessage(event: string, data?: any) {
+function sendUpdateMessage(event: UpdateEvent, data?: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('app-update', { event, data })
   }
 }
 
-/**
- * 设置 IPC 处理器
- */
-function setupIpcHandlers() {
-  // 检查更新
+function setupIpcHandlers(): void {
   ipcMain.handle('check-for-updates', async () => {
     try {
-      const result = await autoUpdater.checkForUpdates()
-      return { success: true, result }
-    } catch (error: any) {
-      return { success: false, error: error.message }
+      return { success: true, result: await autoUpdater.checkForUpdates() }
+    } catch (error: unknown) {
+      return { success: false, error: errorMessage(error) }
     }
   })
-
-  // 下载更新
   ipcMain.handle('download-update', async () => {
     try {
       await autoUpdater.downloadUpdate()
       return { success: true }
-    } catch (error: any) {
-      return { success: false, error: error.message }
+    } catch (error: unknown) {
+      return { success: false, error: errorMessage(error) }
     }
   })
-
-  // 安装更新并重启
   ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall(false, true)
     return { success: true }
   })
-
-  // 获取当前版本
-  ipcMain.handle('get-app-version', () => {
-    return app.getVersion()
-  })
+  ipcMain.handle('get-app-version', () => app.getVersion())
 }
 
-/**
- * 检查更新（可在应用启动时调用）
- */
-export async function checkForUpdatesOnStartup() {
-  // 开发模式下不检查更新
+export async function checkForUpdatesOnStartup(): Promise<void> {
   if (process.env.NODE_ENV === 'development') {
     log.info('Skipping update check in development mode')
     return
   }
 
-  // 延迟 3 秒检查，避免影响启动
-  setTimeout(async () => {
-    try {
-      await autoUpdater.checkForUpdates()
-    } catch (error) {
+  setTimeout(() => {
+    void autoUpdater.checkForUpdates().catch((error: unknown) => {
       log.error('Failed to check for updates on startup:', error)
-    }
+    })
   }, 3000)
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown update error'
 }

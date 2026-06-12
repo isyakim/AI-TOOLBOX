@@ -23,6 +23,10 @@ export interface StreamCallbacks {
   onError?: (error: Error) => void
 }
 
+export interface ChatRequestOptions {
+  temperature?: number
+}
+
 export interface AIClientConfig {
   baseUrl: string
   apiKey: string
@@ -57,7 +61,11 @@ export class AIClient {
   /**
    * 发送聊天请求（流式响应）
    */
-  async chat(messages: ChatMessage[], callbacks: StreamCallbacks = {}): Promise<string> {
+  async chat(
+    messages: ChatMessage[],
+    callbacks: StreamCallbacks = {},
+    options: ChatRequestOptions = {}
+  ): Promise<string> {
     const { onStart, onToken, onComplete, onError } = callbacks
 
     this.abortController = new AbortController()
@@ -75,7 +83,8 @@ export class AIClient {
         body: JSON.stringify({
           model: this.config.model,
           messages,
-          stream: true
+          stream: true,
+          temperature: options.temperature
         }),
         signal: this.abortController.signal
       })

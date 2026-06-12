@@ -1,14 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-
-interface FileAction {
-  action: 'read' | 'write' | 'delete' | 'save' | 'edit' | 'remove'
-  path: string
-  content?: string
-}
+import type { FileActionPayload } from '@/shared/types/ipc'
+import { requiresFileActionPreview } from '@/shared/services/fileActions'
 
 defineProps<{
-  actions: FileAction[]
+  actions: FileActionPayload[]
 }>()
 
 const emit = defineEmits<{
@@ -28,11 +24,7 @@ function getPreviewStatus(index: number) {
   return previewStatus.value[index] || 'idle'
 }
 
-function requiresPreview(action: FileAction) {
-  return ['write', 'save', 'edit', 'delete', 'remove'].includes(action.action)
-}
-
-async function previewAction(action: FileAction, index: number) {
+async function previewAction(action: FileActionPayload, index: number) {
   previewStatus.value[index] = 'loading'
   results.value[index] = ''
 
@@ -48,14 +40,14 @@ async function previewAction(action: FileAction, index: number) {
       previewStatus.value[index] = 'error'
       results.value[index] = `Preview failed: ${res.message}`
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     previewStatus.value[index] = 'error'
-    results.value[index] = `Preview error: ${error.message}`
+    results.value[index] = `Preview error: ${errorMessage(error)}`
   }
 }
 
-async function executeAction(action: FileAction, index: number) {
-  if (requiresPreview(action) && getPreviewStatus(index) !== 'ready') {
+async function executeAction(action: FileActionPayload, index: number) {
+  if (requiresFileActionPreview(action) && getPreviewStatus(index) !== 'ready') {
     results.value[index] = 'Preview the diff before executing this file action.'
     return
   }
@@ -82,10 +74,14 @@ async function executeAction(action: FileAction, index: number) {
       status.value[index] = 'error'
       results.value[index] = `Failed: ${res.message}`
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     status.value[index] = 'error'
-    results.value[index] = `Error: ${error.message}`
+    results.value[index] = `Error: ${errorMessage(error)}`
   }
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown file action error'
 }
 </script>
 
@@ -103,7 +99,7 @@ async function executeAction(action: FileAction, index: number) {
         >
       </div>
 
-      <div v-if="requiresPreview(action)" class="diff-section">
+      <div v-if="requiresFileActionPreview(action)" class="diff-section">
         <div class="diff-header">
           <span>Diff preview required before execution</span>
           <button
@@ -141,7 +137,7 @@ async function executeAction(action: FileAction, index: number) {
         <button
           v-if="getStatus(index) === 'pending' || getStatus(index) === 'error'"
           class="exec-btn"
-          :disabled="requiresPreview(action) && getPreviewStatus(index) !== 'ready'"
+          :disabled="requiresFileActionPreview(action) && getPreviewStatus(index) !== 'ready'"
           @click="executeAction(action, index)"
         >
           Execute

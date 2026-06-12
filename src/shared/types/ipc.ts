@@ -46,6 +46,40 @@ export interface RAGQueryPayload {
   limit?: number
 }
 
+export interface RAGQueryResult {
+  text?: string
+  _distance?: number
+  metadata?: {
+    source?: string
+    path?: string
+    relativePath?: string
+    snippet?: string
+    [key: string]: unknown
+  }
+}
+
+export interface RAGQueryResponse {
+  success: boolean
+  results?: RAGQueryResult[]
+  message?: string
+}
+
+export interface RAGIndexStatus {
+  success: boolean
+  status: 'idle' | 'indexing' | 'ready' | 'error'
+  rootPath: string
+  totalFiles: number
+  indexedFiles: number
+  totalChunks: number
+  currentFile: string
+  startedAt: number
+  completedAt: number
+  message: string
+  projectId?: string
+  indexVersion?: number
+  embeddingModel?: string
+}
+
 export interface ProjectHealthFinding {
   title: string
   status: 'good' | 'watch' | 'needs-work' | string
@@ -83,15 +117,13 @@ export interface AIToolboxAPI {
   ragIngest: (
     payload: RAGIngestPayload
   ) => Promise<{ success: boolean; message?: string; chunks?: number }>
-  ragQuery: (
-    payload: RAGQueryPayload
-  ) => Promise<{ success: boolean; results?: Array<Record<string, unknown>>; message?: string }>
+  ragQuery: (payload: RAGQueryPayload) => Promise<RAGQueryResponse>
   ragIndexProject: (payload: {
     rootPath: string
     extensions: string[]
     config: RAGConfigPayload
-  }) => Promise<Record<string, unknown> & { success: boolean; message?: string }>
-  ragIndexStatus: () => Promise<Record<string, unknown> & { success: boolean }>
+  }) => Promise<RAGIndexStatus>
+  ragIndexStatus: () => Promise<RAGIndexStatus>
   projectHealthCheck: (payload: {
     rootPath: string
   }) => Promise<{ success: boolean; report?: ProjectHealthReport; message?: string }>
