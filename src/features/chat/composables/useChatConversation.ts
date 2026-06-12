@@ -5,11 +5,13 @@ import { getAIClient } from '@/services/aiClient'
 import { RAGService, type RAGCitation } from '@/services/ragService'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
+import { useWorkspaceStore } from '@/stores/workspace'
 import type { ImageInfo } from '@/utils/imageUtils'
 
 export function useChatConversation() {
   const chatStore = useChatStore()
   const configStore = useConfigStore()
+  const workspaceStore = useWorkspaceStore()
   const errorMessage = ref('')
 
   async function send(text: string, images: ImageInfo[] = []) {
@@ -102,9 +104,11 @@ export function useChatConversation() {
   }
 
   async function loadCitations(query: string): Promise<RAGCitation[]> {
-    if (!chatStore.settings.useRAG || !configStore.activeConfig || !query.trim()) return []
+    const projectId = chatStore.activeSession?.projectId || workspaceStore.activeProjectId
+    if (!chatStore.settings.useRAG || !configStore.activeConfig || !projectId || !query.trim())
+      return []
     try {
-      const response = await RAGService.query(query, configStore.activeConfig)
+      const response = await RAGService.query(projectId, query, configStore.activeConfig)
       return response.success ? RAGService.mapResultsToCitations(response.results) : []
     } catch (error: unknown) {
       errorMessage.value =

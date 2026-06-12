@@ -2,6 +2,7 @@
 import type { RAGIndexStatus } from '@/shared/types/ipc'
 
 defineProps<{ status: RAGIndexStatus; progress: number }>()
+const emit = defineEmits<{ pause: []; resume: []; cancel: [] }>()
 </script>
 
 <template>
@@ -23,6 +24,17 @@ defineProps<{ status: RAGIndexStatus; progress: number }>()
     </div>
     <div class="progress"><span :style="{ width: `${progress}%` }"></span></div>
     <p>{{ status.message || 'No active index job.' }}</p>
+    <div v-if="['indexing', 'paused'].includes(status.status)" class="controls">
+      <button v-if="status.status === 'indexing'" @click="emit('pause')">Pause</button>
+      <button v-else @click="emit('resume')">Resume</button>
+      <button @click="emit('cancel')">Cancel</button>
+    </div>
+    <details v-if="status.failedFiles.length">
+      <summary>{{ status.failedFiles.length }} failed file(s)</summary>
+      <p v-for="failure in status.failedFiles" :key="failure.path">
+        {{ failure.path }}: {{ failure.message }}
+      </p>
+    </details>
   </section>
 </template>
 
@@ -79,5 +91,18 @@ p {
   display: block;
   height: 100%;
   background: var(--primary);
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.controls button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
 }
 </style>

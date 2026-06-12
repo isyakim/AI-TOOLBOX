@@ -2,14 +2,16 @@
 import { onMounted } from 'vue'
 import AppSidebar from './AppSidebar.vue'
 import AppHeader from './AppHeader.vue'
-import { useConfigStore, useChatStore } from '@/stores'
+import { useConfigStore, useChatStore, useWorkspaceStore } from '@/stores'
 
 const configStore = useConfigStore()
 const chatStore = useChatStore()
+const workspaceStore = useWorkspaceStore()
 
 onMounted(async () => {
   await configStore.loadFromStorage()
-  chatStore.loadFromStorage()
+  await workspaceStore.load()
+  await chatStore.loadFromStorage()
 })
 </script>
 

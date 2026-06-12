@@ -1,7 +1,8 @@
 import type { ChatSettings, Message, Session } from '@/features/chat/types'
+import type { ChatSnapshotDocument } from '@/shared/types/ipc'
 
 const SNAPSHOT_KEY = 'ai-toolbox-chat'
-const SNAPSHOT_VERSION = 2
+const SNAPSHOT_VERSION = 3
 
 const LEGACY_KEYS = {
   sessions: 'ai-toolbox-sessions',
@@ -10,13 +11,7 @@ const LEGACY_KEYS = {
   settings: 'ai-toolbox-chat-settings'
 } as const
 
-export interface ChatSnapshot {
-  version: typeof SNAPSHOT_VERSION
-  sessions: Session[]
-  activeSessionId: string | null
-  currentRoleId: string
-  settings: ChatSettings
-}
+export type ChatSnapshot = ChatSnapshotDocument
 
 interface LoadOptions {
   defaultRoleId: string
@@ -84,7 +79,10 @@ export function loadChatSnapshot(
   storage: Storage = localStorage
 ): ChatSnapshot | null {
   const current = parseJson(storage.getItem(SNAPSHOT_KEY))
-  if (isRecord(current) && (current.version === 1 || current.version === SNAPSHOT_VERSION)) {
+  if (
+    isRecord(current) &&
+    (current.version === 1 || current.version === 2 || current.version === SNAPSHOT_VERSION)
+  ) {
     const sessions = parseSessions(current.sessions)
     const activeSessionId =
       typeof current.activeSessionId === 'string' &&
@@ -102,7 +100,7 @@ export function loadChatSnapshot(
       currentRoleId,
       settings: normalizeSettings(current.settings, options.defaultSettings)
     }
-    if (current.version === 1) saveChatSnapshot(snapshot, storage)
+    if (current.version !== SNAPSHOT_VERSION) saveChatSnapshot(snapshot, storage)
     return snapshot
   }
 

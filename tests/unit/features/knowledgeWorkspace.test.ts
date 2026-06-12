@@ -13,7 +13,8 @@ describe('useKnowledgeWorkspace', () => {
       api: {
         getConfig: vi.fn().mockResolvedValue({
           projectPath: 'C:/missing-project',
-          extensions: ['.ts', '.unknown']
+          extensions: ['.ts', '.unknown'],
+          excludePatterns: ['coverage/', '*.generated.ts']
         }),
         setConfig: vi.fn().mockResolvedValue({ success: true }),
         setWorkspace: vi.fn().mockResolvedValue({ success: false, message: 'Missing' })
@@ -40,7 +41,8 @@ describe('useKnowledgeWorkspace', () => {
     expect(workspace!.selectedExtensions.value).toEqual(['.ts'])
     expect(window.api.setConfig).toHaveBeenCalledWith('knowledge-workspace', {
       projectPath: '',
-      extensions: ['.ts']
+      extensions: ['.ts'],
+      excludePatterns: ['coverage/', '*.generated.ts']
     })
     app.unmount()
   })
@@ -77,7 +79,10 @@ describe('useKnowledgeWorkspace', () => {
       currentFile: '',
       startedAt: 0,
       completedAt: 1,
-      message: 'done'
+      message: 'done',
+      failedFiles: [],
+      paused: false,
+      cancelRequested: false
     })
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
     const setIntervalSpy = vi.spyOn(window, 'setInterval')

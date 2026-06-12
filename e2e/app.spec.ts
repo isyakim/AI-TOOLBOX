@@ -87,3 +87,9 @@ test('exposes project selection and renders typed index status', async () => {
   await expect(page.getByRole('heading', { name: 'Index status' })).toBeVisible()
   await expect(page.getByText('idle', { exact: true })).toBeVisible()
 })
+
+test('exposes the project map as a first-class product area', async () => {
+  await page.locator('.nav-item').filter({ hasText: 'Project Map' }).click()
+  await expect(page.getByRole('heading', { name: 'Project map', exact: true })).toBeVisible()
+  await expect(page.getByText(/Index the active project/)).toBeVisible()
+})

@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTwoFilesPatch } from 'diff'
 import { setupRAGHandlers } from './rag'
 import { setupAIHandlers } from './ai'
+import { setupChatRepositoryHandlers } from './chatRepository'
 import {
   deleteProvider,
   listProviders,
@@ -303,6 +304,7 @@ app.whenReady().then(() => {
 
   // 初始化 RAG (延迟初始化或根据配置，这里先做基础设置)
   setupAIHandlers()
+  setupChatRepositoryHandlers()
   setupRAGHandlers()
 
   // 文件操作 IPC 处理程序

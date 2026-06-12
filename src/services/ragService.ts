@@ -1,5 +1,6 @@
 import type {
   ProjectHealthReport,
+  ProjectMap,
   RAGConfigPayload,
   RAGIndexStatus,
   RAGQueryResponse,
@@ -12,11 +13,20 @@ export interface RAGCitation {
   relativePath?: string
   snippet: string
   score?: number
+  projectId: string
+  lineStart: number
+  lineEnd: number
+  symbol?: string
+  language?: string
+  indexedAt: string
 }
 
 export interface ProjectIndexOptions {
+  projectId: string
   rootPath: string
   extensions: string[]
+  excludePatterns?: string[]
+  force?: boolean
 }
 
 export interface ProviderRAGConfig {
@@ -34,8 +44,13 @@ export class RAGService {
     return window.api.ragInit(toRAGConfig(config))
   }
 
-  static query(query: string, config: ProviderRAGConfig, limit = 3): Promise<RAGQueryResponse> {
-    return window.api.ragQuery({ query, limit, config: toRAGConfig(config) })
+  static query(
+    projectId: string,
+    query: string,
+    config: ProviderRAGConfig,
+    limit = 3
+  ): Promise<RAGQueryResponse> {
+    return window.api.ragQuery({ projectId, query, limit, config: toRAGConfig(config) })
   }
 
   static indexProject(
@@ -45,8 +60,16 @@ export class RAGService {
     return window.api.ragIndexProject({ ...options, config: toRAGConfig(config) })
   }
 
-  static getIndexStatus(): Promise<RAGIndexStatus> {
-    return window.api.ragIndexStatus()
+  static getIndexStatus(projectId?: string): Promise<RAGIndexStatus> {
+    return window.api.ragIndexStatus(projectId)
+  }
+
+  static getProjectMap(projectId: string): Promise<{
+    success: boolean
+    projectMap?: ProjectMap
+    message?: string
+  }> {
+    return window.api.getProjectMap(projectId)
   }
 
   static runProjectHealthCheck(
@@ -56,14 +79,18 @@ export class RAGService {
   }
 
   static mapResultsToCitations(results: RAGQueryResult[] = []): RAGCitation[] {
-    return results
-      .filter((result) => result.metadata?.source !== 'system')
-      .map((result) => ({
-        source: result.metadata?.relativePath || result.metadata?.source || 'unknown',
-        path: result.metadata?.path,
-        relativePath: result.metadata?.relativePath,
-        snippet: result.metadata?.snippet || result.text?.slice(0, 360) || '',
-        score: result._distance
-      }))
+    return results.map((result) => ({
+      source: result.relativePath,
+      path: result.path,
+      relativePath: result.relativePath,
+      snippet: result.snippet || result.text?.slice(0, 360) || '',
+      score: result.score ?? result._distance,
+      projectId: result.projectId,
+      lineStart: result.lineStart,
+      lineEnd: result.lineEnd,
+      symbol: result.symbol,
+      language: result.language,
+      indexedAt: result.indexedAt
+    }))
   }
 }

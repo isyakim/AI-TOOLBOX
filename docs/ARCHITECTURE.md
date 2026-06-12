@@ -22,12 +22,17 @@ Vue pages compose stores and components. AI output is rendered through the share
 - Provider credentials: a separate encrypted file protected by Electron `safeStorage`.
 - User plugins: JSON files under `userData/plugins`.
 - Official plugin templates: repository `plugins/` directory.
-- Project vectors and index manifest: `userData/vector_db` and `userData/rag-index-manifest.json`.
-- Conversations and lightweight UI state: renderer storage pending a future repository abstraction.
+- Project vectors, maps, and index manifests: `userData/vector_db`, `userData/project-maps.json`, and `userData/project-index-manifest.json`.
+- Conversations: an atomically replaced versioned snapshot under `userData`; legacy renderer storage is read once and migrated.
+- Lightweight UI preferences: application configuration under `userData`.
 
 ## RAG Indexing
 
 Each project receives a stable ID derived from its real path. The manifest records file hashes, index version, and embedding model. Unchanged files are skipped; changed and deleted files are synchronized with LanceDB.
+
+Scanning follows root `.gitignore` rules and user exclusions, and rejects symlink escapes, binary files, oversized files, and sensitive filenames. TypeScript, JavaScript, and TSX use Tree-sitter WASM; Vue single-file components are split with `@vue/compiler-sfc` before analysis. Unsupported or malformed files fall back to line-aware text chunks.
+
+Every vector and query carries a required project ID. Citations include the project, relative and absolute paths, line range, symbol, language, score, and index timestamp. The derived Project Map stores entry files, symbols, import and test relations, large files, and coupling hotspots.
 
 ## Provider Requests
 

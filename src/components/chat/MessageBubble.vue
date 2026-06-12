@@ -145,7 +145,16 @@ watch(
           :key="`${citation.source}-${index}`"
           class="citation-card"
         >
-          <div class="citation-path">{{ citation.relativePath || citation.source }}</div>
+          <div class="citation-path">
+            {{ citation.relativePath || citation.source }}:{{ citation.lineStart }}-{{
+              citation.lineEnd
+            }}
+          </div>
+          <div class="citation-meta">
+            <span v-if="citation.symbol">{{ citation.symbol }}</span>
+            <span v-if="citation.language">{{ citation.language }}</span>
+            <span v-if="citation.score !== undefined">score {{ citation.score.toFixed(3) }}</span>
+          </div>
           <p>{{ citation.snippet }}</p>
         </div>
       </div>
@@ -344,6 +353,15 @@ watch(
   color: var(--text-light);
   font-size: 0.82rem;
   line-height: 1.45;
+}
+
+.citation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-light);
+  font-size: 0.7rem;
 }
 
 /* ===== 图片预览 Modal ===== */
