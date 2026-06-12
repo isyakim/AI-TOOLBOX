@@ -16,16 +16,16 @@ describe('RAGService', () => {
     expect(
       RAGService.mapResultsToCitations([
         {
+          projectId: 'project',
+          path: 'C:/project/src/example.ts',
+          relativePath: 'src/example.ts',
+          lineStart: 1,
+          lineEnd: 2,
+          indexedAt: '2026-06-12T00:00:00.000Z',
+          snippet: 'const value = 1',
           text: 'fallback text',
-          _distance: 0.1,
-          metadata: {
-            source: 'absolute.ts',
-            relativePath: 'src/example.ts',
-            path: 'C:/project/src/example.ts',
-            snippet: 'const value = 1'
-          }
-        },
-        { text: 'ignored', metadata: { source: 'system' } }
+          _distance: 0.1
+        }
       ])
     ).toEqual([
       {
@@ -33,7 +33,11 @@ describe('RAGService', () => {
         path: 'C:/project/src/example.ts',
         relativePath: 'src/example.ts',
         snippet: 'const value = 1',
-        score: 0.1
+        score: 0.1,
+        projectId: 'project',
+        lineStart: 1,
+        lineEnd: 2,
+        indexedAt: '2026-06-12T00:00:00.000Z'
       }
     ])
   })

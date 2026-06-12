@@ -18,7 +18,14 @@ const message = (overrides: Partial<Message>): Message => ({
 describe('messageBuilder', () => {
   it('adds project citations to the system prompt', () => {
     const prompt = buildSystemPrompt(ROLE_MODES[0], [
-      { source: 'src/main.ts', snippet: 'createApp(App)' }
+      {
+        source: 'src/main.ts',
+        snippet: 'createApp(App)',
+        projectId: 'project',
+        lineStart: 1,
+        lineEnd: 1,
+        indexedAt: '2026-06-12T00:00:00.000Z'
+      }
     ])
 
     expect(prompt).toContain('src/main.ts')

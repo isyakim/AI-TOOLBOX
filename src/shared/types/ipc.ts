@@ -76,6 +76,45 @@ export interface ChatMessage {
   content: string | ContentPart[]
 }
 
+export interface ChatSnapshotDocument {
+  version: 3
+  sessions: Array<{
+    id: string
+    projectId?: string
+    title: string
+    messages: Array<{
+      id: string
+      role: 'user' | 'assistant' | 'system'
+      content: string
+      timestamp: number
+      images?: Array<{ url: string; base64: string; type: string }>
+      citations?: Array<{
+        source: string
+        path?: string
+        relativePath?: string
+        snippet: string
+        score?: number
+        projectId: string
+        lineStart: number
+        lineEnd: number
+        symbol?: string
+        language?: string
+        indexedAt: string
+      }>
+    }>
+    createdAt: number
+    updatedAt: number
+  }>
+  activeSessionId: string | null
+  currentRoleId: string
+  settings: {
+    temperature: number
+    contextLength: number
+    enableMemory: boolean
+    useRAG: boolean
+  }
+}
+
 export interface APIError {
   code: string
   message: string
@@ -97,27 +136,31 @@ export interface RAGConfigPayload {
   providerId: string
 }
 
-export interface RAGIngestPayload {
-  chunks: Array<{ text: string; metadata: Record<string, unknown> }>
-  config: RAGConfigPayload
-}
-
 export interface RAGQueryPayload {
+  projectId: string
   query: string
   config: RAGConfigPayload
   limit?: number
+  filters?: {
+    paths?: string[]
+    languages?: string[]
+    symbols?: string[]
+  }
 }
 
 export interface RAGQueryResult {
+  projectId: string
+  path: string
+  relativePath: string
+  lineStart: number
+  lineEnd: number
+  symbol?: string
+  language?: string
+  indexedAt: string
+  score?: number
+  snippet: string
   text?: string
   _distance?: number
-  metadata?: {
-    source?: string
-    path?: string
-    relativePath?: string
-    snippet?: string
-    [key: string]: unknown
-  }
 }
 
 export interface RAGQueryResponse {
@@ -128,7 +171,8 @@ export interface RAGQueryResponse {
 
 export interface RAGIndexStatus {
   success: boolean
-  status: 'idle' | 'indexing' | 'ready' | 'error'
+  status: 'idle' | 'indexing' | 'paused' | 'ready' | 'cancelled' | 'error'
+  projectId?: string
   rootPath: string
   totalFiles: number
   indexedFiles: number
@@ -137,9 +181,50 @@ export interface RAGIndexStatus {
   startedAt: number
   completedAt: number
   message: string
-  projectId?: string
   indexVersion?: number
   embeddingModel?: string
+  failedFiles: Array<{ path: string; message: string }>
+  paused: boolean
+  cancelRequested: boolean
+}
+
+export interface WorkspaceProject {
+  id: string
+  name: string
+  rootPath: string
+  branch: string | null
+  languageStats: Record<string, number>
+  indexVersion: number
+  lastIndexedAt: string | null
+  failedFiles: Array<{ path: string; message: string }>
+}
+
+export interface ProjectSymbol {
+  id: string
+  projectId: string
+  path: string
+  name: string
+  kind: 'function' | 'class' | 'method' | 'variable' | 'component'
+  exported: boolean
+  lineStart: number
+  lineEnd: number
+}
+
+export interface ProjectRelation {
+  projectId: string
+  fromPath: string
+  toPath: string
+  kind: 'imports' | 'tests'
+}
+
+export interface ProjectMap {
+  project: WorkspaceProject
+  entryFiles: string[]
+  symbols: ProjectSymbol[]
+  relations: ProjectRelation[]
+  testFiles: string[]
+  largeFiles: Array<{ path: string; bytes: number }>
+  hotspots: Array<{ path: string; score: number; reason: string }>
 }
 
 export interface ProjectHealthFinding {
@@ -172,6 +257,8 @@ export interface AIToolboxAPI {
   ) => Promise<{ success: boolean; requestId?: string; error?: APIError }>
   abortAIChat: (requestId: string) => Promise<{ success: boolean }>
   onAIChatEvent: (callback: (event: AIChatEvent) => void) => () => void
+  loadChatSnapshot: () => Promise<ChatSnapshotDocument | null>
+  saveChatSnapshot: (snapshot: ChatSnapshotDocument) => Promise<{ success: boolean }>
   fileAction: (payload: FileActionPayload) => Promise<FileActionResult>
   previewFileAction: (payload: FileActionPayload) => Promise<FilePreviewResult>
   selectDirectory: () => Promise<{ success: boolean; path?: string; message?: string }>
@@ -186,16 +273,26 @@ export interface AIToolboxAPI {
   ) => Promise<{ success: boolean; path?: string; message?: string }>
   importPluginFile: () => Promise<{ success: boolean; plugin?: PluginDocument; message?: string }>
   ragInit: (config: RAGConfigPayload) => Promise<{ success: boolean; message?: string }>
-  ragIngest: (
-    payload: RAGIngestPayload
-  ) => Promise<{ success: boolean; message?: string; chunks?: number }>
   ragQuery: (payload: RAGQueryPayload) => Promise<RAGQueryResponse>
   ragIndexProject: (payload: {
+    projectId: string
     rootPath: string
     extensions: string[]
+    excludePatterns?: string[]
+    force?: boolean
     config: RAGConfigPayload
   }) => Promise<RAGIndexStatus>
-  ragIndexStatus: () => Promise<RAGIndexStatus>
+  ragIndexStatus: (projectId?: string) => Promise<RAGIndexStatus>
+  ragPauseIndex: (projectId: string) => Promise<{ success: boolean }>
+  ragResumeIndex: (projectId: string) => Promise<{ success: boolean }>
+  ragCancelIndex: (projectId: string) => Promise<{ success: boolean }>
+  listWorkspaceProjects: () => Promise<WorkspaceProject[]>
+  registerWorkspaceProject: (rootPath: string) => Promise<WorkspaceProject>
+  getActiveWorkspaceProjectId: () => Promise<string | null>
+  setActiveWorkspaceProject: (projectId: string) => Promise<{ success: boolean }>
+  getProjectMap: (
+    projectId: string
+  ) => Promise<{ success: boolean; projectMap?: ProjectMap; message?: string }>
   projectHealthCheck: (payload: {
     rootPath: string
   }) => Promise<{ success: boolean; report?: ProjectHealthReport; message?: string }>

@@ -37,15 +37,21 @@ onMounted(() => void workspace.restore())
     </header>
 
     <ProjectSelector
+      :projects="workspace.projects.value"
+      :active-project-id="workspace.activeProjectId.value"
       :project-path="workspace.projectPath.value"
       :extensions="workspace.selectedExtensions.value"
+      :exclude-patterns="workspace.excludePatterns.value"
       :extension-options="KNOWLEDGE_EXTENSIONS"
       :can-index="workspace.canIndex.value"
       :is-indexing="workspace.isIndexing.value"
       :is-checking="workspace.isChecking.value"
       @choose="workspace.chooseDirectory"
+      @select-project="workspace.selectProject"
       @toggle-extension="workspace.toggleExtension"
       @index="workspace.indexProject"
+      @rebuild="workspace.indexProject(true)"
+      @update-exclude-patterns="workspace.updateExcludePatterns"
       @health-check="workspace.runHealthCheck"
     />
 
@@ -53,6 +59,9 @@ onMounted(() => void workspace.restore())
       <IndexStatusPanel
         :status="workspace.indexStatus.value"
         :progress="workspace.progressPercent.value"
+        @pause="workspace.pauseIndex"
+        @resume="workspace.resumeIndex"
+        @cancel="workspace.cancelIndex"
       />
       <HealthReportPanel :report="workspace.healthReport.value" />
     </div>

@@ -17,6 +17,7 @@ export interface Message {
 
 export interface Session {
   id: string
+  projectId?: string
   title: string
   messages: Message[]
   createdAt: number

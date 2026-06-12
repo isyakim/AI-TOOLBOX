@@ -6,6 +6,7 @@ describe('chat store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(localStorage.setItem).mockClear()
+    vi.mocked(window.api.saveChatSnapshot).mockClear()
   })
 
   it('creates, renames, and deletes sessions', () => {
@@ -25,13 +26,14 @@ describe('chat store', () => {
     const sessionId = store.createSession()
     const messageId = store.addMessage(sessionId, { role: 'assistant', content: '' }, false)
     vi.mocked(localStorage.setItem).mockClear()
+    vi.mocked(window.api.saveChatSnapshot).mockClear()
 
     store.appendMessageToken(sessionId, messageId!, 'one')
     store.appendMessageToken(sessionId, messageId!, ' two')
 
     expect(store.activeSession?.messages[0].content).toBe('one two')
-    expect(localStorage.setItem).not.toHaveBeenCalled()
+    expect(window.api.saveChatSnapshot).not.toHaveBeenCalled()
     store.persist()
-    expect(localStorage.setItem).toHaveBeenCalledTimes(1)
+    expect(window.api.saveChatSnapshot).toHaveBeenCalledTimes(1)
   })
 })

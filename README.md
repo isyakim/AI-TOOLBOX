@@ -17,8 +17,9 @@ npm run dev
 
 - Streams AI responses through the trusted Electron main process.
 - Supports OpenAI-compatible cloud providers and API-key-free local Ollama models.
-- Indexes selected local projects with LanceDB and incremental file hashes.
-- Shows source snippets and file paths with project-aware answers.
+- Indexes selected local projects with LanceDB, `.gitignore`, incremental file hashes, and language-aware chunks for TypeScript, JavaScript, TSX, and Vue.
+- Builds a Project Map with entry files, symbols, imports, tests, large modules, and coupling hotspots.
+- Shows cited source snippets with project identity, file paths, line ranges, symbols, scores, and index timestamps.
 - Loads ten built-in developer workflows from versioned plugin JSON files.
 - Requires a diff preview before write, edit, or delete file actions.
 - Restricts file operations to the selected workspace.
@@ -77,7 +78,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Security](SECURITY.md), and [Plugin S
 
 ## 中文说明
 
-AI Toolbox 是面向开发者的本地优先 AI Agent 工作台。它支持本地 Ollama 和 OpenAI 兼容服务，可以为本地项目建立索引、进行带引用的问答、运行开发工作流，并在执行文件修改前强制展示 Diff。
+AI Toolbox 是面向开发者的本地优先 AI Agent 工作台。它支持本地 Ollama 和 OpenAI 兼容服务，可以为本地项目建立隔离索引、生成项目结构图、进行带文件路径和行号引用的问答，并在执行文件修改前强制展示 Diff。
 
 项目主动排除了主题编辑器、通用工具集合、UI 生成器和任意插件 JavaScript 执行，以保持清晰的产品边界和可信的安全模型。
 

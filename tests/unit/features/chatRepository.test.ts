@@ -48,7 +48,7 @@ describe('chatRepository', () => {
   it('round-trips a versioned snapshot', () => {
     const storage = new MemoryStorage()
     const snapshot: ChatSnapshot = {
-      version: 2,
+      version: 3,
       sessions: [],
       activeSessionId: null,
       currentRoleId: 'roo-coder',
@@ -74,7 +74,7 @@ describe('chatRepository', () => {
     )
 
     expect(loadChatSnapshot(options, storage)).toEqual({
-      version: 2,
+      version: 3,
       sessions: [],
       activeSessionId: null,
       currentRoleId: 'roo-helper',
@@ -111,8 +111,8 @@ describe('chatRepository', () => {
 
     const snapshot = loadChatSnapshot(options, storage)
 
-    expect(snapshot?.version).toBe(2)
+    expect(snapshot?.version).toBe(3)
     expect(snapshot?.settings).toEqual(defaults)
-    expect(JSON.parse(storage.getItem('ai-toolbox-chat') || '{}').version).toBe(2)
+    expect(JSON.parse(storage.getItem('ai-toolbox-chat') || '{}').version).toBe(3)
   })
 })

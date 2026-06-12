@@ -15,6 +15,15 @@ const localStorageMock = {
 }
 global.localStorage = localStorageMock as Storage
 
+Object.defineProperty(window, 'api', {
+  configurable: true,
+  writable: true,
+  value: {
+    loadChatSnapshot: vi.fn().mockResolvedValue(null),
+    saveChatSnapshot: vi.fn().mockResolvedValue({ success: true })
+  }
+})
+
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

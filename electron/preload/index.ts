@@ -6,7 +6,6 @@ import type {
   PluginDocument,
   ProviderSaveInput,
   RAGConfigPayload,
-  RAGIngestPayload,
   RAGQueryPayload
 } from '../../src/shared/types/ipc'
 
@@ -37,6 +36,8 @@ const api: AIToolboxAPI = {
     ipcRenderer.on('ai:chat:event', listener)
     return () => ipcRenderer.removeListener('ai:chat:event', listener)
   },
+  loadChatSnapshot: () => ipcRenderer.invoke('chat:snapshot:get'),
+  saveChatSnapshot: (snapshot) => ipcRenderer.invoke('chat:snapshot:set', snapshot),
 
   // 文件操作
   fileAction: (payload: FileActionPayload) => ipcRenderer.invoke('file:action', payload),
@@ -54,10 +55,19 @@ const api: AIToolboxAPI = {
 
   // RAG 操作
   ragInit: (config: RAGConfigPayload) => ipcRenderer.invoke('rag:init', config),
-  ragIngest: (payload: RAGIngestPayload) => ipcRenderer.invoke('rag:ingest', payload),
   ragQuery: (payload: RAGQueryPayload) => ipcRenderer.invoke('rag:query', payload),
   ragIndexProject: (payload) => ipcRenderer.invoke('rag:index-project', payload),
-  ragIndexStatus: () => ipcRenderer.invoke('rag:index-status'),
+  ragIndexStatus: (projectId) => ipcRenderer.invoke('rag:index-status', projectId),
+  ragPauseIndex: (projectId) => ipcRenderer.invoke('rag:index-pause', projectId),
+  ragResumeIndex: (projectId) => ipcRenderer.invoke('rag:index-resume', projectId),
+  ragCancelIndex: (projectId) => ipcRenderer.invoke('rag:index-cancel', projectId),
+  listWorkspaceProjects: () => ipcRenderer.invoke('workspace-projects:list'),
+  registerWorkspaceProject: (rootPath) =>
+    ipcRenderer.invoke('workspace-projects:register', rootPath),
+  getActiveWorkspaceProjectId: () => ipcRenderer.invoke('workspace-projects:get-active'),
+  setActiveWorkspaceProject: (projectId) =>
+    ipcRenderer.invoke('workspace-projects:set-active', projectId),
+  getProjectMap: (projectId) => ipcRenderer.invoke('project-map:get', projectId),
   projectHealthCheck: (payload) => ipcRenderer.invoke('project:health-check', payload),
   ragClear: () => ipcRenderer.invoke('rag:clear')
 }

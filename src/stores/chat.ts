@@ -1,10 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import {
-  loadChatSnapshot,
-  saveChatSnapshot,
-  type ChatSnapshot
-} from '@/features/chat/repositories/chatRepository'
+import { loadChatSnapshot, type ChatSnapshot } from '@/features/chat/repositories/chatRepository'
 import { ROLE_MODES } from '@/features/chat/roles'
 import {
   DEFAULT_CHAT_SETTINGS,
@@ -13,6 +9,7 @@ import {
   type Session
 } from '@/features/chat/types'
 import type { RAGCitation } from '@/services/ragService'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 export { ROLE_MODES } from '@/features/chat/roles'
 export type { ChatSettings, Message, MessageImage, RoleMode, Session } from '@/features/chat/types'
@@ -50,19 +47,21 @@ export const useChatStore = defineStore('chat', () => {
 
   function persist() {
     const snapshot: ChatSnapshot = {
-      version: 2,
+      version: 3,
       sessions: sessions.value,
       activeSessionId: activeSessionId.value,
       currentRoleId: currentRoleId.value,
       settings: settings.value
     }
-    saveChatSnapshot(snapshot)
+    void window.api.saveChatSnapshot(snapshot)
   }
 
   function createSession(): string {
+    const workspaceStore = useWorkspaceStore()
     const now = Date.now()
     const session: Session = {
       id: crypto.randomUUID(),
+      projectId: workspaceStore.activeProjectId || undefined,
       title: 'New conversation',
       messages: [],
       createdAt: now,
@@ -178,17 +177,23 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming.value = messageId !== null
   }
 
-  function loadFromStorage() {
-    const snapshot = loadChatSnapshot({
-      defaultRoleId: ROLE_MODES[0].id,
-      defaultSettings: DEFAULT_CHAT_SETTINGS,
-      validRoleIds: ROLE_MODES.map((role) => role.id)
-    })
+  async function loadFromStorage() {
+    const snapshot =
+      (await window.api.loadChatSnapshot()) ||
+      loadChatSnapshot({
+        defaultRoleId: ROLE_MODES[0].id,
+        defaultSettings: DEFAULT_CHAT_SETTINGS,
+        validRoleIds: ROLE_MODES.map((role) => role.id)
+      })
     if (snapshot) {
       sessions.value = snapshot.sessions
       activeSessionId.value = snapshot.activeSessionId
       currentRoleId.value = snapshot.currentRoleId
       settings.value = snapshot.settings
+      if (localStorage.getItem('ai-toolbox-chat')) {
+        await window.api.saveChatSnapshot(snapshot)
+        localStorage.removeItem('ai-toolbox-chat')
+      }
     }
     if (!sessions.value.length) createSession()
     else if (!activeSessionId.value) {

@@ -35,6 +35,7 @@ describe('useChatConversation', () => {
     mocks.abort.mockReset()
     mocks.chat.mockReset()
     mocks.query.mockReset()
+    vi.mocked(window.api.saveChatSnapshot).mockClear()
     const config = useConfigStore()
     config.configs.push({
       id: 'provider',
@@ -62,12 +63,13 @@ describe('useChatConversation', () => {
     const store = useChatStore()
     store.createSession()
     vi.mocked(localStorage.setItem).mockClear()
+    vi.mocked(window.api.saveChatSnapshot).mockClear()
 
     await useChatConversation().send('Hi')
 
     expect(store.activeSession?.messages.at(-1)?.content).toBe('Hello world')
     expect(store.isStreaming).toBe(false)
-    expect(localStorage.setItem).toHaveBeenCalledTimes(1)
+    expect(window.api.saveChatSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('records failures in the assistant message and supports stopping', async () => {

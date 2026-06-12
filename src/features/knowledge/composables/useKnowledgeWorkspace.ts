@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import { RAGService } from '@/services/ragService'
 import type { ProjectHealthReport, RAGIndexStatus } from '@/shared/types/ipc'
 import { useConfigStore } from '@/stores/config'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const CONFIG_KEY = 'knowledge-workspace'
 export const KNOWLEDGE_EXTENSIONS = [
@@ -28,11 +29,15 @@ const emptyStatus = (): RAGIndexStatus => ({
   currentFile: '',
   startedAt: 0,
   completedAt: 0,
-  message: ''
+  message: '',
+  failedFiles: [],
+  paused: false,
+  cancelRequested: false
 })
 
 export function useKnowledgeWorkspace() {
   const configStore = useConfigStore()
+  const workspaceStore = useWorkspaceStore()
   const projectPath = ref('')
   const selectedExtensions = ref([...DEFAULT_EXTENSIONS])
   const isInitializing = ref(false)
@@ -40,6 +45,7 @@ export function useKnowledgeWorkspace() {
   const isChecking = ref(false)
   const indexStatus = ref<RAGIndexStatus>(emptyStatus())
   const healthReport = ref<ProjectHealthReport | null>(null)
+  const excludePatterns = ref<string[]>([])
   const activityLog = ref<string[]>([])
   let pollTimer: number | null = null
 
@@ -78,7 +84,8 @@ export function useKnowledgeWorkspace() {
   async function chooseDirectory() {
     const result = await window.api.selectDirectory()
     if (!result.success || !result.path) return
-    projectPath.value = result.path
+    const project = await workspaceStore.register(result.path)
+    projectPath.value = project.rootPath
     healthReport.value = null
     await persistPreferences()
     addLog(`Selected project: ${result.path}`)
@@ -86,14 +93,16 @@ export function useKnowledgeWorkspace() {
 
   async function refreshStatus() {
     try {
-      indexStatus.value = await RAGService.getIndexStatus()
+      indexStatus.value = await RAGService.getIndexStatus(
+        workspaceStore.activeProjectId || undefined
+      )
     } catch (error: unknown) {
       addLog(`Status refresh failed: ${errorMessage(error)}`)
     }
   }
 
-  async function indexProject() {
-    if (!projectPath.value || !configStore.activeConfig) {
+  async function indexProject(force = false) {
+    if (!projectPath.value || !configStore.activeConfig || !workspaceStore.activeProjectId) {
       addLog('Select a project and configure an active provider first.')
       return
     }
@@ -106,15 +115,22 @@ export function useKnowledgeWorkspace() {
     startPolling()
     try {
       indexStatus.value = await RAGService.indexProject(
-        { rootPath: projectPath.value, extensions: selectedExtensions.value },
+        {
+          projectId: workspaceStore.activeProjectId,
+          rootPath: projectPath.value,
+          extensions: selectedExtensions.value,
+          excludePatterns: excludePatterns.value,
+          force
+        },
         configStore.activeConfig
       )
       addLog(
         indexStatus.value.success
-          ? indexStatus.value.message || 'Project indexed.'
+          ? indexStatus.value.message || (force ? 'Project index rebuilt.' : 'Project indexed.')
           : `Index failed: ${indexStatus.value.message}`
       )
       await persistPreferences()
+      await workspaceStore.refresh()
     } catch (error: unknown) {
       addLog(`Index failed: ${errorMessage(error)}`)
     } finally {
@@ -153,10 +169,38 @@ export function useKnowledgeWorkspace() {
     } else addLog('Knowledge base could not be cleared.')
   }
 
+  async function pauseIndex() {
+    if (workspaceStore.activeProjectId)
+      await window.api.ragPauseIndex(workspaceStore.activeProjectId)
+  }
+
+  async function resumeIndex() {
+    if (workspaceStore.activeProjectId)
+      await window.api.ragResumeIndex(workspaceStore.activeProjectId)
+  }
+
+  async function cancelIndex() {
+    if (workspaceStore.activeProjectId)
+      await window.api.ragCancelIndex(workspaceStore.activeProjectId)
+  }
+
+  async function selectProject(projectId: string) {
+    await workspaceStore.setActive(projectId)
+    projectPath.value = workspaceStore.activeProject?.rootPath || ''
+    healthReport.value = null
+    await window.api.setWorkspace(projectPath.value)
+    await refreshStatus()
+  }
+
   async function toggleExtension(extension: string) {
     selectedExtensions.value = selectedExtensions.value.includes(extension)
       ? selectedExtensions.value.filter((item) => item !== extension)
       : [...selectedExtensions.value, extension]
+    await persistPreferences()
+  }
+
+  async function updateExcludePatterns(patterns: string[]) {
+    excludePatterns.value = Array.from(new Set(patterns))
     await persistPreferences()
   }
 
@@ -167,6 +211,7 @@ export function useKnowledgeWorkspace() {
       selectedExtensions.value = stored.extensions.filter((extension) =>
         KNOWLEDGE_EXTENSIONS.includes(extension)
       )
+      excludePatterns.value = stored.excludePatterns || []
       if (!selectedExtensions.value.length) selectedExtensions.value = [...DEFAULT_EXTENSIONS]
     }
 
@@ -179,6 +224,10 @@ export function useKnowledgeWorkspace() {
       }
     }
 
+    if (workspaceStore.activeProject) {
+      projectPath.value = workspaceStore.activeProject.rootPath
+    }
+
     if (configStore.isReady) {
       await initialize()
       await refreshStatus()
@@ -188,7 +237,8 @@ export function useKnowledgeWorkspace() {
   async function persistPreferences() {
     await window.api.setConfig(CONFIG_KEY, {
       projectPath: projectPath.value,
-      extensions: selectedExtensions.value
+      extensions: selectedExtensions.value,
+      excludePatterns: excludePatterns.value
     })
   }
 
@@ -206,7 +256,11 @@ export function useKnowledgeWorkspace() {
 
   return {
     projectPath,
+    projects: computed(() => workspaceStore.projects),
+    activeProjectId: computed(() => workspaceStore.activeProjectId),
+    projectMap: computed(() => workspaceStore.projectMap),
     selectedExtensions,
+    excludePatterns,
     isInitializing,
     isIndexing,
     isChecking,
@@ -222,15 +276,22 @@ export function useKnowledgeWorkspace() {
     runHealthCheck,
     clearKnowledge,
     toggleExtension,
+    updateExcludePatterns,
+    selectProject,
+    pauseIndex,
+    resumeIndex,
+    cancelIndex,
     restore,
     startPolling,
     stopPolling
   }
 }
 
-function isKnowledgePreferences(
-  value: unknown
-): value is { projectPath: string; extensions: string[] } {
+function isKnowledgePreferences(value: unknown): value is {
+  projectPath: string
+  extensions: string[]
+  excludePatterns?: string[]
+} {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -238,7 +299,10 @@ function isKnowledgePreferences(
     typeof value.projectPath === 'string' &&
     'extensions' in value &&
     Array.isArray(value.extensions) &&
-    value.extensions.every((extension) => typeof extension === 'string')
+    value.extensions.every((extension) => typeof extension === 'string') &&
+    (!('excludePatterns' in value) ||
+      (Array.isArray(value.excludePatterns) &&
+        value.excludePatterns.every((pattern) => typeof pattern === 'string')))
   )
 }
 

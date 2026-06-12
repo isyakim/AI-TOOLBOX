@@ -39,15 +39,20 @@
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
     "@lancedb/lancedb": "^0.23.0",
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "@vue/compiler-sfc": "^3.5.38",
+    "chokidar": "^4.0.3",
     "diff": "^9.0.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.1.7",
+    "ignore": "^7.0.5",
     "marked": "^15.0.12",
     "openai": "^6.17.0",
     "pinia": "^2.3.1",
     "prismjs": "^1.30.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "web-tree-sitter": "^0.26.9"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
@@ -85,6 +90,16 @@
         "to": "plugins",
         "filter": [
           "*.json"
+        ]
+      },
+      {
+        "from": "node_modules/@vscode/tree-sitter-wasm/wasm",
+        "to": "tree-sitter",
+        "filter": [
+          "tree-sitter.wasm",
+          "tree-sitter-javascript.wasm",
+          "tree-sitter-typescript.wasm",
+          "tree-sitter-tsx.wasm"
         ]
       }
     ],
