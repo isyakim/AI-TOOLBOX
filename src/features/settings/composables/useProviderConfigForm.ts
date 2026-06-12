@@ -108,6 +108,7 @@ export function useProviderConfigForm() {
         await configStore.setActiveConfig(id)
         statusMessage.value = 'Provider configuration saved.'
       }
+      form.value.baseUrl = baseUrl
       form.value.apiKey = ''
       testResult.value = null
     } catch (error: unknown) {
