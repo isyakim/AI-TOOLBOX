@@ -10,7 +10,12 @@ import { PROVIDERS, useConfigStore } from '@/stores/config'
 export function useProviderConfigForm() {
   const configStore = useConfigStore()
   const selectedProviderId = ref(PROVIDERS[0]?.id || '')
-  const form = ref({ baseUrl: '', apiKey: '', model: '' })
+  const form = ref({
+    baseUrl: '',
+    apiKey: '',
+    model: '',
+    embeddingModel: 'text-embedding-3-small'
+  })
   const testResult = ref<ProviderConnectionResult | null>(null)
   const statusMessage = ref('')
   const isTesting = ref(false)
@@ -28,7 +33,8 @@ export function useProviderConfigForm() {
       form.value = {
         baseUrl: selectedProvider.value.baseURL,
         apiKey: '',
-        model: selectedProvider.value.models[0]?.value || ''
+        model: selectedProvider.value.models[0]?.value || '',
+        embeddingModel: 'text-embedding-3-small'
       }
       testResult.value = null
       statusMessage.value = ''
@@ -65,6 +71,7 @@ export function useProviderConfigForm() {
       apiKey: form.value.apiKey.trim(),
       models: [form.value.model.trim()],
       selectedModel: form.value.model.trim(),
+      embeddingModel: form.value.embeddingModel.trim() || 'text-embedding-3-small',
       isActive: true
     }
 

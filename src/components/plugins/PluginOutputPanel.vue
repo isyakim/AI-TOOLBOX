@@ -3,12 +3,7 @@ import { computed, ref } from 'vue'
 import FileActionPanel from '@/components/chat/FileActionPanel.vue'
 import type { PluginExecutionResult } from '@/services/pluginExecutor'
 import { renderSafeMarkdown } from '@/shared/services/markdown'
-
-interface FileAction {
-  action: 'read' | 'write' | 'delete' | 'save' | 'edit' | 'remove'
-  path: string
-  content?: string
-}
+import { parseFileActions } from '@/shared/services/fileActions'
 
 const props = defineProps<{
   streamingOutput: string
@@ -28,31 +23,8 @@ const output = computed(() =>
     : props.result?.processedOutput || props.streamingOutput
 )
 
-const fileActions = computed<FileAction[]>(() => {
-  const actions: FileAction[] = []
-  const regex = /```file-action\s*([\s\S]+?)```/gi
-  let match: RegExpExecArray | null
-
-  while ((match = regex.exec(output.value)) !== null) {
-    try {
-      const payload: unknown = JSON.parse(match[1])
-      if (
-        typeof payload === 'object' &&
-        payload !== null &&
-        'action' in payload &&
-        'path' in payload &&
-        typeof payload.action === 'string' &&
-        typeof payload.path === 'string'
-      ) {
-        actions.push(payload as FileAction)
-      }
-    } catch {
-      // Ignore malformed action blocks; the generated text remains visible to the user.
-    }
-  }
-
-  return actions
-})
+const parsedActions = computed(() => parseFileActions(output.value))
+const fileActions = computed(() => parsedActions.value.actions)
 
 async function copyOutput() {
   if (!output.value) return
@@ -89,7 +61,13 @@ async function copyOutput() {
       <div v-else-if="result?.error" class="error-block">{{ result.error }}</div>
       <template v-else>
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="markdown-content" v-html="renderSafeMarkdown(output)"></div>
+        <div
+          class="markdown-content"
+          v-html="renderSafeMarkdown(parsedActions.contentWithoutActions)"
+        ></div>
+        <p v-if="parsedActions.invalidBlocks" class="action-warning">
+          {{ parsedActions.invalidBlocks }} invalid file action block(s) were ignored.
+        </p>
         <FileActionPanel
           v-if="fileActions.length"
           :actions="fileActions"
@@ -184,6 +162,15 @@ async function copyOutput() {
   border-radius: 6px;
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.action-warning {
+  padding: 8px 10px;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.76rem;
 }
 
 .markdown-content {

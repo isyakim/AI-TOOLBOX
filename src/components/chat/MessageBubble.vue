@@ -11,6 +11,7 @@ import FileActionPanel from './FileActionPanel.vue'
 import { speechService } from '@/services/speechService'
 import type { RAGCitation } from '@/services/ragService'
 import { renderSafeMarkdown } from '@/shared/services/markdown'
+import { parseFileActions } from '@/shared/services/fileActions'
 
 interface MessageImage {
   url: string
@@ -33,31 +34,16 @@ const emit = defineEmits<{
 // TTS 状态
 const isSpeaking = ref(false)
 
-// Parse file-action blocks
-const fileActions = computed(() => {
-  if (props.role !== 'assistant') return []
-
-  const regex = /```file-action\s*([\s\S]+?)```/gi
-  const actions: any[] = []
-  let match
-
-  while ((match = regex.exec(props.content)) !== null) {
-    try {
-      const payload = JSON.parse(match[1])
-      if (payload && payload.action && payload.path) {
-        actions.push(payload)
-      }
-    } catch (e) {
-      console.warn('Failed to parse file-action block:', e)
-    }
-  }
-  return actions
-})
+const parsedFileActions = computed(() =>
+  props.role === 'assistant'
+    ? parseFileActions(props.content)
+    : { actions: [], invalidBlocks: 0, contentWithoutActions: props.content }
+)
+const fileActions = computed(() => parsedFileActions.value.actions)
 
 // Clean content (remove file-action blocks for rendering)
 const cleanContent = computed(() => {
-  if (props.role !== 'assistant') return props.content
-  return props.content.replace(/```file-action\s*([\s\S]+?)```/gi, '').trim()
+  return parsedFileActions.value.contentWithoutActions
 })
 
 const renderedContent = computed(() => {
@@ -170,6 +156,9 @@ watch(
         :actions="fileActions"
         @executed="handleToolExecuted"
       />
+      <p v-if="parsedFileActions.invalidBlocks" class="action-warning">
+        {{ parsedFileActions.invalidBlocks }} invalid file action block(s) were ignored.
+      </p>
 
       <!-- 消息工具栏 -->
       <div v-if="role === 'assistant' && content.length > 0" class="message-actions">

@@ -27,6 +27,7 @@ export interface APIConfig {
   apiKey: string
   models: string[]
   selectedModel: string
+  embeddingModel?: string
   isActive: boolean
 }
 

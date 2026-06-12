@@ -6,7 +6,7 @@ const props = defineProps<{
   providers: Provider[]
   selectedProvider: Provider
   selectedProviderId: string
-  form: { baseUrl: string; apiKey: string; model: string }
+  form: { baseUrl: string; apiKey: string; model: string; embeddingModel: string }
   models: ModelOption[]
   testResult: ProviderConnectionResult | null
   statusMessage: string
@@ -17,13 +17,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:selectedProviderId': [value: string]
-  'update:form': [value: { baseUrl: string; apiKey: string; model: string }]
+  'update:form': [value: { baseUrl: string; apiKey: string; model: string; embeddingModel: string }]
   test: []
   save: []
   docs: []
 }>()
 
-function updateForm(key: 'baseUrl' | 'apiKey' | 'model', value: string) {
+function updateForm(key: 'baseUrl' | 'apiKey' | 'model' | 'embeddingModel', value: string) {
   emit('update:form', { ...props.form, [key]: value })
 }
 </script>
@@ -96,6 +96,16 @@ function updateForm(key: 'baseUrl' | 'apiKey' | 'model', value: string) {
           placeholder="Model name"
           @input="updateForm('model', ($event.target as HTMLInputElement).value)"
         />
+      </label>
+
+      <label>
+        <span>Embedding model</span>
+        <input
+          :value="form.embeddingModel"
+          placeholder="text-embedding-3-small"
+          @input="updateForm('embeddingModel', ($event.target as HTMLInputElement).value)"
+        />
+        <small>Used for project knowledge indexing and retrieval.</small>
       </label>
     </div>
 

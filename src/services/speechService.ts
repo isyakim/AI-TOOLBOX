@@ -1,8 +1,3 @@
-/**
- * Speech Service - 语音输入与TTS播报
- * 使用 Web Speech API 实现语音识别和语音合成
- */
-
 export interface SpeechRecognitionResult {
   transcript: string
   confidence: number
@@ -16,257 +11,211 @@ export interface SpeechRecognitionCallbacks {
   onStart?: () => void
 }
 
-// 扩展 Window 类型以包含 SpeechRecognition
-interface SpeechRecognitionType {
-  new (): any
-  prototype: any
+interface BrowserSpeechAlternative {
+  transcript: string
+  confidence: number
+}
+
+interface BrowserSpeechResult {
+  readonly isFinal: boolean
+  readonly length: number
+  readonly [index: number]: BrowserSpeechAlternative
+}
+
+interface BrowserSpeechResultList {
+  readonly length: number
+  readonly [index: number]: BrowserSpeechResult
+}
+
+interface BrowserSpeechResultEvent extends Event {
+  readonly results: BrowserSpeechResultList
+}
+
+interface BrowserSpeechErrorEvent extends Event {
+  readonly error: string
+}
+
+interface BrowserSpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onstart: (() => void) | null
+  onresult: ((event: BrowserSpeechResultEvent) => void) | null
+  onerror: ((event: BrowserSpeechErrorEvent) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+}
+
+interface BrowserSpeechRecognitionConstructor {
+  new (): BrowserSpeechRecognition
 }
 
 declare global {
   interface Window {
-    SpeechRecognition: SpeechRecognitionType
-    webkitSpeechRecognition: SpeechRecognitionType
+    SpeechRecognition?: BrowserSpeechRecognitionConstructor
+    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor
   }
 }
 
+interface SpeakOptions {
+  voice?: SpeechSynthesisVoice
+  rate?: number
+  pitch?: number
+  volume?: number
+  onEnd?: () => void
+  onError?: (error: string) => void
+}
+
 class SpeechService {
-  private recognition: any = null
+  private recognition: BrowserSpeechRecognition | null = null
   private synthesis: SpeechSynthesis | null = null
   private isListening = false
   private isSpeaking = false
 
   constructor() {
-    // 初始化语音识别
-    if (typeof window !== 'undefined') {
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
-      if (SpeechRecognitionAPI) {
-        this.recognition = new SpeechRecognitionAPI()
-        this.recognition.continuous = false
-        this.recognition.interimResults = true
-        this.recognition.lang = 'zh-CN'
-      }
-
-      // 初始化语音合成
-      this.synthesis = window.speechSynthesis || null
+    if (typeof window === 'undefined') return
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (Recognition) {
+      this.recognition = new Recognition()
+      this.recognition.continuous = false
+      this.recognition.interimResults = true
+      this.recognition.lang = 'zh-CN'
     }
+    this.synthesis = window.speechSynthesis || null
   }
 
-  /**
-   * 检查是否支持语音识别
-   */
   get isRecognitionSupported(): boolean {
     return this.recognition !== null
   }
 
-  /**
-   * 检查是否支持语音合成
-   */
   get isSynthesisSupported(): boolean {
     return this.synthesis !== null
   }
 
-  /**
-   * 获取当前录音状态
-   */
   get recording(): boolean {
     return this.isListening
   }
 
-  /**
-   * 获取当前播放状态
-   */
   get speaking(): boolean {
     return this.isSpeaking
   }
 
-  /**
-   * 开始语音识别
-   */
   startRecognition(callbacks: SpeechRecognitionCallbacks = {}): boolean {
-    if (!this.recognition) {
-      callbacks.onError?.('您的浏览器不支持语音识别')
+    const recognition = this.recognition
+    if (!recognition) {
+      callbacks.onError?.('Speech recognition is not supported by this browser.')
       return false
     }
+    if (this.isListening) return false
 
-    if (this.isListening) {
-      return false
-    }
-
-    const { onResult, onEnd, onError, onStart } = callbacks
-
-    this.recognition.onstart = () => {
+    recognition.onstart = () => {
       this.isListening = true
-      onStart?.()
+      callbacks.onStart?.()
     }
-
-    this.recognition.onresult = (event: any) => {
+    recognition.onresult = (event) => {
       const result = event.results[event.results.length - 1]
-      const transcript = result[0].transcript
-      const confidence = result[0].confidence
-      const isFinal = result.isFinal
-
-      onResult?.({ transcript, confidence, isFinal })
+      const alternative = result?.[0]
+      if (!result || !alternative) return
+      callbacks.onResult?.({
+        transcript: alternative.transcript,
+        confidence: alternative.confidence,
+        isFinal: result.isFinal
+      })
     }
-
-    this.recognition.onerror = (event: any) => {
+    recognition.onerror = (event) => {
       this.isListening = false
-
-      const errorMessages: Record<string, string> = {
-        'no-speech': '未检测到语音，请重试',
-        aborted: '语音识别已取消',
-        'audio-capture': '无法访问麦克风，请检查权限',
-        network: '网络错误',
-        'not-allowed': '麦克风权限被拒绝',
-        'service-not-allowed': '语音服务不可用'
+      const messages: Record<string, string> = {
+        'no-speech': 'No speech was detected. Please try again.',
+        aborted: 'Speech recognition was cancelled.',
+        'audio-capture': 'The microphone is unavailable. Check its permissions.',
+        network: 'A network error interrupted speech recognition.',
+        'not-allowed': 'Microphone permission was denied.',
+        'service-not-allowed': 'Speech recognition service is unavailable.'
       }
-
-      onError?.(errorMessages[event.error] || `语音识别错误: ${event.error}`)
+      callbacks.onError?.(messages[event.error] || `Speech recognition failed: ${event.error}`)
     }
-
-    this.recognition.onend = () => {
+    recognition.onend = () => {
       this.isListening = false
-      onEnd?.()
+      callbacks.onEnd?.()
     }
 
     try {
-      this.recognition.start()
+      recognition.start()
       return true
-    } catch {
-      callbacks.onError?.('启动语音识别失败')
+    } catch (error: unknown) {
+      callbacks.onError?.(error instanceof Error ? error.message : 'Speech recognition failed.')
       return false
     }
   }
 
-  /**
-   * 停止语音识别
-   */
-  stopRecognition() {
+  stopRecognition(): void {
     if (this.recognition && this.isListening) {
       this.recognition.stop()
       this.isListening = false
     }
   }
 
-  /**
-   * 切换语音识别状态
-   */
   toggleRecognition(callbacks: SpeechRecognitionCallbacks = {}): boolean {
-    if (this.isListening) {
-      this.stopRecognition()
-      return false
-    } else {
-      return this.startRecognition(callbacks)
-    }
+    if (!this.isListening) return this.startRecognition(callbacks)
+    this.stopRecognition()
+    return false
   }
 
-  /**
-   * 获取可用的语音列表
-   */
   getVoices(): SpeechSynthesisVoice[] {
-    if (!this.synthesis) return []
-    return this.synthesis.getVoices()
+    return this.synthesis?.getVoices() || []
   }
 
-  /**
-   * 获取中文语音
-   */
   getChineseVoices(): SpeechSynthesisVoice[] {
     return this.getVoices().filter(
-      (v) => v.lang.startsWith('zh') || v.lang.includes('CN') || v.lang.includes('TW')
+      (voice) =>
+        voice.lang.startsWith('zh') || voice.lang.includes('CN') || voice.lang.includes('TW')
     )
   }
 
-  /**
-   * 朗读文本 (TTS)
-   */
-  speak(
-    text: string,
-    options: {
-      voice?: SpeechSynthesisVoice
-      rate?: number
-      pitch?: number
-      volume?: number
-      onEnd?: () => void
-      onError?: (error: string) => void
-    } = {}
-  ): boolean {
+  speak(text: string, options: SpeakOptions = {}): boolean {
     if (!this.synthesis) {
-      options.onError?.('您的浏览器不支持语音合成')
+      options.onError?.('Speech synthesis is not supported by this browser.')
       return false
     }
 
-    // 停止当前播放
     this.stopSpeaking()
-
-    const { voice, rate = 1.0, pitch = 1.0, volume = 1.0, onEnd, onError } = options
-
     const utterance = new SpeechSynthesisUtterance(text)
-
-    // 设置语音参数
-    if (voice) {
-      utterance.voice = voice
-    } else {
-      // 尝试使用中文语音
-      const chineseVoices = this.getChineseVoices()
-      if (chineseVoices.length > 0) {
-        utterance.voice = chineseVoices[0]
-      }
-    }
-
-    utterance.rate = rate
-    utterance.pitch = pitch
-    utterance.volume = volume
+    utterance.voice = options.voice || this.getChineseVoices()[0] || null
+    utterance.rate = options.rate ?? 1
+    utterance.pitch = options.pitch ?? 1
+    utterance.volume = options.volume ?? 1
     utterance.lang = 'zh-CN'
-
     utterance.onstart = () => {
       this.isSpeaking = true
     }
-
     utterance.onend = () => {
       this.isSpeaking = false
-      onEnd?.()
+      options.onEnd?.()
     }
-
     utterance.onerror = (event) => {
       this.isSpeaking = false
-      onError?.(event.error || '语音播放失败')
+      options.onError?.(event.error || 'Speech playback failed.')
     }
-
     this.synthesis.speak(utterance)
     return true
   }
 
-  /**
-   * 停止语音播放
-   */
-  stopSpeaking() {
+  stopSpeaking(): void {
     if (this.synthesis && this.isSpeaking) {
       this.synthesis.cancel()
       this.isSpeaking = false
     }
   }
 
-  /**
-   * 暂停语音播放
-   */
-  pauseSpeaking() {
-    if (this.synthesis) {
-      this.synthesis.pause()
-    }
+  pauseSpeaking(): void {
+    this.synthesis?.pause()
   }
 
-  /**
-   * 恢复语音播放
-   */
-  resumeSpeaking() {
-    if (this.synthesis) {
-      this.synthesis.resume()
-    }
+  resumeSpeaking(): void {
+    this.synthesis?.resume()
   }
 }
 
-// 单例导出
 export const speechService = new SpeechService()
-
-// 类型导出
 export { SpeechService }

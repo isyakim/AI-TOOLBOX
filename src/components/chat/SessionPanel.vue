@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { useChatStore } from '@/stores/chat'
+import { ref } from 'vue'
+import ConfirmDialog from '@/shared/components/ConfirmDialog.vue'
 
 const chatStore = useChatStore()
+const pendingDeleteId = ref<string | null>(null)
 
 function createSession() {
   chatStore.createSession()
@@ -23,9 +26,12 @@ function formatTime(timestamp: number): string {
 
 function deleteSession(id: string, event: Event) {
   event.stopPropagation()
-  if (confirm('Delete this session?')) {
-    chatStore.deleteSession(id)
-  }
+  pendingDeleteId.value = id
+}
+
+function confirmDelete() {
+  if (pendingDeleteId.value) chatStore.deleteSession(pendingDeleteId.value)
+  pendingDeleteId.value = null
 }
 </script>
 
@@ -70,6 +76,15 @@ function deleteSession(id: string, event: Event) {
       </div>
     </div>
   </aside>
+  <ConfirmDialog
+    :open="Boolean(pendingDeleteId)"
+    title="Delete conversation"
+    message="This permanently removes the selected conversation and its messages."
+    confirm-label="Delete conversation"
+    destructive
+    @confirm="confirmDelete"
+    @cancel="pendingDeleteId = null"
+  />
 </template>
 
 <style scoped>
