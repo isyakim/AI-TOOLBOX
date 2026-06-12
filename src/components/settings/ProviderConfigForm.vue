@@ -69,12 +69,15 @@ function updateForm(key: 'baseUrl' | 'apiKey' | 'model' | 'embeddingModel', valu
       </label>
 
       <label>
-        <span>API key</span>
+        <span>API key{{ selectedProvider.requiresApiKey ? '' : ' (not required)' }}</span>
         <input
           :value="form.apiKey"
           type="password"
           autocomplete="off"
-          placeholder="Provider API key"
+          :placeholder="
+            selectedProvider.requiresApiKey ? 'Provider API key' : 'Not required for Ollama'
+          "
+          :disabled="!selectedProvider.requiresApiKey"
           @input="updateForm('apiKey', ($event.target as HTMLInputElement).value)"
         />
       </label>

@@ -1,20 +1,6 @@
-/**
- * AI Client Service
- * 统一的 AI API 调用服务，支持流式响应
- */
+import type { AIChatEvent, ChatMessage, ContentPart } from '@/shared/types/ipc'
 
-export interface ContentPart {
-  type: 'text' | 'image_url'
-  text?: string
-  image_url?: {
-    url: string // 格式: "data:image/jpeg;base64,{base64_data}"
-  }
-}
-
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string | ContentPart[]
-}
+export type { ChatMessage, ContentPart }
 
 export interface StreamCallbacks {
   onStart?: () => void
@@ -27,169 +13,93 @@ export interface ChatRequestOptions {
   temperature?: number
 }
 
-export interface AIClientConfig {
-  baseUrl: string
-  apiKey: string
-  model: string
-}
-
 export class AIClient {
-  private config: AIClientConfig
-  private abortController: AbortController | null = null
+  private providerId: string
+  private requestId: string | null = null
 
-  constructor(config: AIClientConfig) {
-    this.config = config
+  constructor(providerId: string) {
+    this.providerId = providerId
   }
 
-  /**
-   * 更新客户端配置
-   */
-  updateConfig(config: Partial<AIClientConfig>) {
-    this.config = { ...this.config, ...config }
+  updateProvider(providerId: string): void {
+    this.providerId = providerId
   }
 
-  /**
-   * 停止当前流式请求
-   */
-  abort() {
-    if (this.abortController) {
-      this.abortController.abort()
-      this.abortController = null
-    }
-  }
-
-  /**
-   * 发送聊天请求（流式响应）
-   */
   async chat(
     messages: ChatMessage[],
     callbacks: StreamCallbacks = {},
     options: ChatRequestOptions = {}
   ): Promise<string> {
-    const { onStart, onToken, onComplete, onError } = callbacks
+    callbacks.onStart?.()
+    return new Promise((resolve, reject) => {
+      let expectedRequestId: string | null = null
+      const queuedEvents: AIChatEvent[] = []
 
-    this.abortController = new AbortController()
-    let fullText = ''
+      const handleEvent = (event: AIChatEvent) => {
+        if (!expectedRequestId) {
+          queuedEvents.push(event)
+          return
+        }
+        if (event.requestId !== expectedRequestId) return
+        if (event.type === 'token') {
+          callbacks.onToken?.(event.token)
+          return
+        }
+        cleanup()
+        this.requestId = null
+        if (event.type === 'complete') {
+          callbacks.onComplete?.(event.text)
+          resolve(event.text)
+        } else {
+          const error = new Error(event.error.message)
+          callbacks.onError?.(error)
+          reject(error)
+        }
+      }
+      const unsubscribe = window.api.onAIChatEvent(handleEvent)
+      const cleanup = () => unsubscribe()
 
-    try {
-      onStart?.()
-
-      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.config.apiKey}`
-        },
-        body: JSON.stringify({
-          model: this.config.model,
+      void window.api
+        .startAIChat({
+          providerId: this.providerId,
           messages,
-          stream: true,
           temperature: options.temperature
-        }),
-        signal: this.abortController.signal
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.message || `HTTP ${response.status}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('Response body is not readable')
-      }
-
-      const decoder = new TextDecoder()
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value, { stream: true })
-        const lines = chunk.split('\n').filter((line) => line.trim() !== '')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-
-            try {
-              const parsed = JSON.parse(data)
-              const delta = parsed.choices?.[0]?.delta
-              const content = delta?.content || ''
-
-              if (content) {
-                fullText += content
-                onToken?.(content)
-              }
-            } catch {
-              // Skip invalid JSON
-            }
+        })
+        .then((result) => {
+          if (!result.success || !result.requestId) {
+            cleanup()
+            reject(new Error(result.error?.message || 'Unable to start provider request.'))
+            return
           }
-        }
-      }
-
-      onComplete?.(fullText)
-      return fullText
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          onComplete?.(fullText)
-          return fullText
-        }
-        onError?.(error)
-        throw error
-      }
-      throw error
-    } finally {
-      this.abortController = null
-    }
+          expectedRequestId = result.requestId
+          this.requestId = result.requestId
+          queuedEvents.splice(0).forEach(handleEvent)
+        })
+        .catch((error: unknown) => {
+          cleanup()
+          reject(error instanceof Error ? error : new Error('Unable to start provider request.'))
+        })
+    })
   }
 
-  /**
-   * 测试 API 连接
-   */
-  async testConnection(): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await fetch(`${this.config.baseUrl}/models`, {
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`
-        }
-      })
-
-      if (response.ok) {
-        return { success: true, message: '连接成功' }
-      } else {
-        const error = await response.json().catch(() => ({}))
-        return {
-          success: false,
-          message: error.error?.message || `HTTP ${response.status}`
-        }
-      }
-    } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : '连接失败'
-      }
-    }
+  abort(): void {
+    if (this.requestId) void window.api.abortAIChat(this.requestId)
   }
 }
 
-// 单例实例
 let aiClientInstance: AIClient | null = null
 
 export function getAIClient(): AIClient | null {
   return aiClientInstance
 }
 
-export function createAIClient(config: AIClientConfig): AIClient {
-  aiClientInstance = new AIClient(config)
+export function createAIClient(providerId: string): AIClient {
+  if (aiClientInstance) aiClientInstance.updateProvider(providerId)
+  else aiClientInstance = new AIClient(providerId)
   return aiClientInstance
 }
 
-export function destroyAIClient() {
-  if (aiClientInstance) {
-    aiClientInstance.abort()
-    aiClientInstance = null
-  }
+export function destroyAIClient(): void {
+  aiClientInstance?.abort()
+  aiClientInstance = null
 }

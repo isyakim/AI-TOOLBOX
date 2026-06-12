@@ -4,8 +4,20 @@ import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTwoFilesPatch } from 'diff'
 import { setupRAGHandlers } from './rag'
+import { setupAIHandlers } from './ai'
+import {
+  deleteProvider,
+  listProviders,
+  saveProvider,
+  setActiveProvider
+} from './providerRepository'
 import { resolveWorkspacePath } from './workspace'
-import type { FileActionPayload, PluginDocument } from '../../src/shared/types/ipc'
+import { checkForUpdatesOnStartup, initAutoUpdater } from './updater'
+import type {
+  FileActionPayload,
+  PluginDocument,
+  ProviderSaveInput
+} from '../../src/shared/types/ipc'
 
 let activeWorkspaceRoot: string | null = null
 
@@ -32,6 +44,21 @@ function isFileActionPayload(value: unknown): value is FileActionPayload {
     payload.path &&
     payload.action &&
     ['read', 'write', 'save', 'edit', 'delete', 'remove'].includes(payload.action)
+  )
+}
+
+function isProviderSaveInput(value: unknown): value is ProviderSaveInput {
+  if (!value || typeof value !== 'object') return false
+  const input = value as Partial<ProviderSaveInput>
+  return Boolean(
+    input.providerId &&
+    input.providerName &&
+    input.kind &&
+    ['openai-compatible', 'ollama'].includes(input.kind) &&
+    input.baseUrl &&
+    typeof input.requiresApiKey === 'boolean' &&
+    input.selectedModel !== undefined &&
+    input.embeddingModel
   )
 }
 
@@ -68,7 +95,11 @@ async function getPluginsDir() {
   return dir
 }
 
-function createWindow(): void {
+function getBundledPluginsDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'plugins') : join(__dirname, '../../plugins')
+}
+
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -105,6 +136,7 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  return mainWindow
 }
 
 app.whenReady().then(() => {
@@ -119,14 +151,25 @@ app.whenReady().then(() => {
   // IPC handlers
   ipcMain.handle('plugins:list', async () => {
     try {
-      const dir = await getPluginsDir()
-      const entries = await fs.readdir(dir)
-      const plugins = []
-
-      for (const entry of entries.filter((name) => name.endsWith('.json'))) {
-        const filePath = join(dir, entry)
-        const raw = await fs.readFile(filePath, 'utf-8')
-        plugins.push({ ...JSON.parse(raw), filePath })
+      const userDir = await getPluginsDir()
+      const sources = [
+        { dir: getBundledPluginsDir(), isBuiltIn: true, source: 'builtin' },
+        { dir: userDir, isBuiltIn: false, source: 'file' }
+      ] as const
+      const plugins: Array<Record<string, unknown>> = []
+      for (const source of sources) {
+        const entries = await fs.readdir(source.dir).catch(() => [])
+        for (const entry of entries.filter((name) => name.endsWith('.json'))) {
+          const filePath = join(source.dir, entry)
+          const raw = await fs.readFile(filePath, 'utf-8')
+          plugins.push({
+            ...JSON.parse(raw),
+            filePath,
+            isBuiltIn: source.isBuiltIn,
+            isInstalled: true,
+            source: source.source
+          })
+        }
       }
 
       return { success: true, plugins }
@@ -137,6 +180,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('config:get', async (_, key: unknown) => {
     if (typeof key !== 'string') return undefined
+    if (key === 'provider-config') return undefined
     const config = await readSecureConfig()
     return config[key]
   })
@@ -144,6 +188,9 @@ app.whenReady().then(() => {
   ipcMain.handle('config:set', async (_, key: unknown, value: unknown) => {
     try {
       if (typeof key !== 'string') return { success: false, message: 'Invalid config key.' }
+      if (key === 'provider-config') {
+        return { success: false, message: 'Provider configuration uses the dedicated secure API.' }
+      }
       const config = await readSecureConfig()
       config[key] = value
       await writeSecureConfig(config)
@@ -151,6 +198,20 @@ app.whenReady().then(() => {
     } catch (error: unknown) {
       return { success: false, message: errorMessage(error) }
     }
+  })
+
+  ipcMain.handle('providers:list', () => listProviders())
+  ipcMain.handle('providers:save', (_, input: unknown) => {
+    if (!isProviderSaveInput(input)) throw new Error('Invalid provider configuration.')
+    return saveProvider(input)
+  })
+  ipcMain.handle('providers:delete', (_, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid provider ID.')
+    return deleteProvider(id)
+  })
+  ipcMain.handle('providers:set-active', (_, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('Invalid provider ID.')
+    return setActiveProvider(id)
   })
 
   ipcMain.handle('plugins:save', async (_, plugin: unknown) => {
@@ -241,6 +302,7 @@ app.whenReady().then(() => {
   })
 
   // 初始化 RAG (延迟初始化或根据配置，这里先做基础设置)
+  setupAIHandlers()
   setupRAGHandlers()
 
   // 文件操作 IPC 处理程序
@@ -317,7 +379,11 @@ app.whenReady().then(() => {
     win?.close()
   })
 
-  createWindow()
+  const mainWindow = createWindow()
+  if (app.isPackaged) {
+    initAutoUpdater(mainWindow)
+    void checkForUpdatesOnStartup()
+  }
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

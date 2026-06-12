@@ -11,7 +11,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/chat', title: 'Chat', key: '⌘' },
+  { path: '/chat', title: 'Chat', key: 'CH' },
   { path: '/knowledge', title: 'Knowledge', key: 'KB' },
   { path: '/plugins', title: 'Plugins', key: 'PL' },
   { path: '/settings', title: 'Settings', key: 'CFG' },
@@ -50,7 +50,7 @@ function navigateTo(path: string) {
 
     <div class="sidebar-footer">
       <span class="footer-label">Local-first</span>
-      <span class="footer-copy">RAG · Plugins · File diff approval</span>
+      <span class="footer-copy">RAG | Plugins | Diff approval</span>
     </div>
   </aside>
 </template>

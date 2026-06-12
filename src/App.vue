@@ -10,5 +10,5 @@ import AppLayout from './components/layout/AppLayout.vue'
 </template>
 
 <style>
-/* 全局样式已在 main.ts 中引入 */
+/* Global styles are imported by main.ts. */
 </style>

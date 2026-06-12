@@ -55,9 +55,13 @@ describe('useKnowledgeWorkspace', () => {
       providerId: 'openai',
       providerName: 'OpenAI',
       baseUrl: 'https://api.example.com/v1',
-      apiKey: 'key',
+      kind: 'openai-compatible',
       models: ['model'],
       selectedModel: 'model',
+      embeddingModel: 'embed-model',
+      requiresApiKey: true,
+      hasCredential: true,
+      timeoutMs: 120000,
       isActive: true
     })
     config.activeConfigId = 'provider'

@@ -64,7 +64,7 @@ function confirmDelete() {
       >
         <span class="session-title">{{ session.title }}</span>
         <span class="session-meta">
-          {{ session.messages.length }} messages · {{ formatTime(session.updatedAt) }}
+          {{ session.messages.length }} messages | {{ formatTime(session.updatedAt) }}
         </span>
         <span class="delete-btn" title="Delete session" @click="deleteSession(session.id, $event)"
           >Delete</span

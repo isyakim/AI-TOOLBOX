@@ -159,7 +159,7 @@ defineExpose({
     </div>
 
     <div class="composer-meta">
-      <span>Enter to send · Shift+Enter for a new line</span>
+      <span>Enter to send | Shift+Enter for a new line</span>
       <span v-if="images.length">{{ images.length }}/{{ maxImages }} images</span>
       <span v-if="imageError || speechError" class="error">{{ imageError || speechError }}</span>
     </div>

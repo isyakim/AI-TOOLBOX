@@ -28,11 +28,73 @@ export interface PluginDocument {
   fields: unknown[]
 }
 
-export interface RAGConfigPayload {
-  apiKey: string
+export type ProviderKind = 'openai-compatible' | 'ollama'
+
+export interface ProviderPublicConfig {
+  id: string
+  providerId: string
+  providerName: string
+  kind: ProviderKind
   baseUrl: string
-  model?: string
-  embeddingModel?: string
+  models: string[]
+  selectedModel: string
+  embeddingModel: string
+  requiresApiKey: boolean
+  hasCredential: boolean
+  timeoutMs: number
+  isActive: boolean
+}
+
+export interface ProviderRuntimeConfig extends ProviderPublicConfig {
+  apiKey: string
+}
+
+export interface ProviderSaveInput extends Omit<ProviderPublicConfig, 'id' | 'hasCredential'> {
+  id?: string
+  apiKey?: string
+}
+
+export interface ProviderState {
+  configs: ProviderPublicConfig[]
+  activeConfigId: string | null
+}
+
+export interface ProviderConnectionResult {
+  success: boolean
+  message: string
+  models: string[]
+}
+
+export interface ContentPart {
+  type: 'text' | 'image_url'
+  text?: string
+  image_url?: { url: string }
+}
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string | ContentPart[]
+}
+
+export interface APIError {
+  code: string
+  message: string
+  details?: unknown
+}
+
+export interface AIChatStartPayload {
+  providerId: string
+  messages: ChatMessage[]
+  temperature?: number
+}
+
+export type AIChatEvent =
+  | { requestId: string; type: 'token'; token: string }
+  | { requestId: string; type: 'complete'; text: string; aborted?: boolean }
+  | { requestId: string; type: 'error'; error: APIError }
+
+export interface RAGConfigPayload {
+  providerId: string
 }
 
 export interface RAGIngestPayload {
@@ -100,6 +162,16 @@ export interface AIToolboxAPI {
   maximize: () => void
   close: () => void
   platform: NodeJS.Platform
+  listProviderConfigs: () => Promise<ProviderState>
+  saveProviderConfig: (input: ProviderSaveInput) => Promise<ProviderPublicConfig>
+  deleteProviderConfig: (id: string) => Promise<ProviderState>
+  setActiveProviderConfig: (id: string) => Promise<ProviderState>
+  testProvider: (input: ProviderSaveInput) => Promise<ProviderConnectionResult>
+  startAIChat: (
+    payload: AIChatStartPayload
+  ) => Promise<{ success: boolean; requestId?: string; error?: APIError }>
+  abortAIChat: (requestId: string) => Promise<{ success: boolean }>
+  onAIChatEvent: (callback: (event: AIChatEvent) => void) => () => void
   fileAction: (payload: FileActionPayload) => Promise<FileActionResult>
   previewFileAction: (payload: FileActionPayload) => Promise<FilePreviewResult>
   selectDirectory: () => Promise<{ success: boolean; path?: string; message?: string }>

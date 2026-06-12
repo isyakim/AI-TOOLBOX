@@ -10,8 +10,8 @@ const configStore = useConfigStore()
 const providerForm = useProviderConfigForm()
 const pendingDelete = ref<APIConfig | null>(null)
 
-function deleteConfig() {
-  if (pendingDelete.value) configStore.deleteConfig(pendingDelete.value.id)
+async function deleteConfig() {
+  if (pendingDelete.value) await configStore.deleteConfig(pendingDelete.value.id)
   pendingDelete.value = null
 }
 </script>

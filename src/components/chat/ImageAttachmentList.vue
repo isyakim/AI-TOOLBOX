@@ -14,7 +14,7 @@ const emit = defineEmits<{
   <div class="attachment-list" aria-label="Image attachments">
     <div v-for="(image, index) in images" :key="image.url" class="attachment">
       <img :src="image.url" :alt="`Attachment ${index + 1}`" />
-      <button type="button" title="Remove image" @click="emit('remove', index)">×</button>
+      <button type="button" title="Remove image" @click="emit('remove', index)">x</button>
       <span>{{ Math.ceil(image.size / 1024) }} KB</span>
     </div>
   </div>

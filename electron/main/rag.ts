@@ -6,12 +6,14 @@ import type { Connection, Table } from '@lancedb/lancedb'
 import OpenAI from 'openai'
 import type {
   ProjectHealthReport,
+  ProviderRuntimeConfig,
   RAGConfigPayload,
   RAGIndexStatus,
   RAGIngestPayload,
   RAGQueryPayload,
   RAGQueryResult
 } from '../../src/shared/types/ipc'
+import { resolveProvider } from './providerRepository'
 
 type LanceDBModule = typeof import('@lancedb/lancedb')
 type ChunkMetadata = Record<string, unknown>
@@ -81,26 +83,27 @@ async function getLanceDB(): Promise<LanceDBModule> {
   }
 }
 
-function getEmbeddingModel(config: RAGConfigPayload): string {
+function getEmbeddingModel(config: ProviderRuntimeConfig): string {
   return config.embeddingModel?.trim() || DEFAULT_EMBEDDING_MODEL
 }
 
-export function getTableName(config: RAGConfigPayload): string {
+export function getTableName(config: ProviderRuntimeConfig): string {
   return `${TABLE_PREFIX}${hash(getEmbeddingModel(config)).slice(0, 12)}`
 }
 
 export async function initRAG(config: RAGConfigPayload): Promise<void> {
+  const provider = await resolveProvider(config.providerId)
   const lance = await getLanceDB()
   if (!db) db = await lance.connect(join(app.getPath('userData'), 'vector_db'))
 
-  const tableName = getTableName(config)
+  const tableName = getTableName(provider)
   if (table && activeTableName === tableName) return
 
   const tableNames = await db.tableNames()
   if (tableNames.includes(tableName)) {
     table = await db.openTable(tableName)
   } else {
-    const initialVector = await getEmbedding('AI Toolbox knowledge index', config)
+    const initialVector = await getEmbedding('AI Toolbox knowledge index', provider)
     table = await db.createTable(tableName, [
       {
         id: 'init',
@@ -117,9 +120,9 @@ export async function initRAG(config: RAGConfigPayload): Promise<void> {
   activeTableName = tableName
 }
 
-async function getEmbedding(text: string, config: RAGConfigPayload): Promise<number[]> {
+async function getEmbedding(text: string, config: ProviderRuntimeConfig): Promise<number[]> {
   const openai = new OpenAI({
-    apiKey: config.apiKey,
+    apiKey: config.apiKey || 'ollama',
     baseURL: config.baseUrl,
     dangerouslyAllowBrowser: false
   })
@@ -219,7 +222,10 @@ async function scanProjectFiles(rootPath: string, extensions: string[]): Promise
   return files
 }
 
-async function ingestChunks(chunks: KnowledgeChunk[], config: RAGConfigPayload): Promise<number> {
+async function ingestChunks(
+  chunks: KnowledgeChunk[],
+  config: ProviderRuntimeConfig
+): Promise<number> {
   if (!table || !chunks.length) return 0
   const dataWithEmbeddings = []
   for (const chunk of chunks) {
@@ -306,6 +312,7 @@ async function indexProject(payload: {
 
   try {
     await initRAG(config)
+    const provider = await resolveProvider(config.providerId)
     if (!table) throw new Error('Knowledge table is unavailable.')
 
     resetIndexState('indexing')
@@ -314,7 +321,7 @@ async function indexProject(payload: {
     indexState.totalFiles = files.length
     const realRoot = await fs.realpath(rootPath)
     const projectId = hash(realRoot).slice(0, 24)
-    const embeddingModel = getEmbeddingModel(config)
+    const embeddingModel = getEmbeddingModel(provider)
     const manifest = await readManifest()
     const previous = manifest.projects[projectId]
     const previousFiles =
@@ -357,7 +364,7 @@ async function indexProject(payload: {
         extension: extname(filePath).toLowerCase(),
         kind: 'project-file'
       })
-      indexState.totalChunks += await ingestChunks(chunks, config)
+      indexState.totalChunks += await ingestChunks(chunks, provider)
       indexState.indexedFiles += 1
     }
 
@@ -391,7 +398,8 @@ export function setupRAGHandlers(): void {
       return { success: false, message: 'No knowledge chunks were provided.' }
     try {
       await initRAG(payload.config)
-      return { success: true, chunks: await ingestChunks(payload.chunks, payload.config) }
+      const provider = await resolveProvider(payload.config.providerId)
+      return { success: true, chunks: await ingestChunks(payload.chunks, provider) }
     } catch (error: unknown) {
       console.error('RAG ingest error:', error)
       return { success: false, message: errorMessage(error) }
@@ -401,8 +409,9 @@ export function setupRAGHandlers(): void {
   ipcMain.handle('rag:query', async (_, payload: RAGQueryPayload) => {
     try {
       await initRAG(payload.config)
+      const provider = await resolveProvider(payload.config.providerId)
       if (!table) return { success: false, message: 'Knowledge table is unavailable.' }
-      const queryVector = await getEmbedding(payload.query, payload.config)
+      const queryVector = await getEmbedding(payload.query, provider)
       const results = (await table
         .search(queryVector)
         .limit(payload.limit ?? 5)

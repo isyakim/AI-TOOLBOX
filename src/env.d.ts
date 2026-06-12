@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 
-import type { ElectronAPI } from '@electron-toolkit/preload'
 import type { AIToolboxAPI } from './shared/types/ipc'
 
 declare module '*.vue' {
@@ -11,7 +10,6 @@ declare module '*.vue' {
 
 declare global {
   interface Window {
-    electron: ElectronAPI
     api: AIToolboxAPI
   }
 }

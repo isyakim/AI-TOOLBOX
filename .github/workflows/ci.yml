@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -46,3 +46,31 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --registry=https://registry.npmjs.org --audit-level=high --json > audit.json 2>audit-error.log
+          status=$?
+          if grep -q '"metadata"' audit.json; then
+            cat audit.json
+            exit $status
+          fi
+          echo "::warning::npm audit unavailable"
+          cat audit-error.log
+      - name: Report development dependency findings
+        continue-on-error: true
+        run: npm audit --registry=https://registry.npmjs.org --audit-level=high
+      - run: npm run license:check
