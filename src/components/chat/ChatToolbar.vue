@@ -43,7 +43,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeDropdown))
 
       <div class="role-picker">
         <button class="role-button" @click.stop="rolesOpen = !rolesOpen">
-          {{ currentRole.title }} <span>▾</span>
+          {{ currentRole.title }} <span aria-hidden="true">v</span>
         </button>
         <div v-if="rolesOpen" class="role-menu">
           <button

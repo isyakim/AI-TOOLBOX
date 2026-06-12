@@ -5,16 +5,10 @@ describe('RAGService', () => {
   it('maps provider configuration explicitly', () => {
     expect(
       toRAGConfig({
-        apiKey: 'key',
-        baseUrl: 'https://api.example.com/v1',
-        selectedModel: 'chat-model',
-        embeddingModel: 'embed-model'
+        id: 'provider-id'
       })
     ).toEqual({
-      apiKey: 'key',
-      baseUrl: 'https://api.example.com/v1',
-      model: 'chat-model',
-      embeddingModel: 'embed-model'
+      providerId: 'provider-id'
     })
   })
 

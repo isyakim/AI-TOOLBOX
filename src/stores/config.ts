@@ -1,7 +1,8 @@
+import { computed, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
-import { createAIClient, destroyAIClient } from '@/services/aiClient'
 import providersData from '@/data/providers.json'
+import { createAIClient, destroyAIClient } from '@/services/aiClient'
+import type { ProviderKind, ProviderPublicConfig, ProviderSaveInput } from '@/shared/types/ipc'
 
 export interface ModelOption {
   value: string
@@ -14,132 +15,95 @@ export interface Provider {
   desc: string
   baseURL: string
   docs: string
-  endpoint: string
   models: ModelOption[]
-  custom?: boolean
+  kind: ProviderKind
+  requiresApiKey: boolean
+  defaultEmbeddingModel: string
 }
 
-export interface APIConfig {
-  id: string
-  providerId: string
-  providerName: string
-  baseUrl: string
-  apiKey: string
-  models: string[]
-  selectedModel: string
-  embeddingModel?: string
-  isActive: boolean
-}
-
-// 从 JSON 加载服务商数据
-export const PROVIDERS: Provider[] = providersData as Provider[]
+export type APIConfig = ProviderPublicConfig
+export const PROVIDERS = providersData as Provider[]
 
 export const useConfigStore = defineStore('config', () => {
-  // State
   const configs = ref<APIConfig[]>([])
   const activeConfigId = ref<string | null>(null)
-
-  // Getters
   const activeConfig = computed(
-    () => configs.value.find((c) => c.id === activeConfigId.value) || null
+    () => configs.value.find((config) => config.id === activeConfigId.value) || null
   )
-
-  const isReady = computed(
-    () =>
-      activeConfig.value !== null &&
-      activeConfig.value.apiKey.length > 0 &&
-      activeConfig.value.baseUrl.length > 0
+  const isReady = computed(() =>
+    Boolean(activeConfig.value?.baseUrl && activeConfig.value.hasCredential)
   )
-
   const currentProvider = computed(() =>
     activeConfig.value
-      ? PROVIDERS.find((p) => p.id === activeConfig.value?.providerId) || null
+      ? PROVIDERS.find((provider) => provider.id === activeConfig.value?.providerId) || null
       : null
   )
 
-  // Watch for config changes to update AI Client
   watch(
     activeConfig,
     (config) => {
-      if (config && config.apiKey && config.baseUrl) {
-        createAIClient({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
-          model: config.selectedModel || 'gpt-4'
-        })
-      } else {
-        destroyAIClient()
-      }
+      if (config && isReady.value) createAIClient(config.id)
+      else destroyAIClient()
     },
     { immediate: true }
   )
 
-  // Actions
-  function addConfig(config: Omit<APIConfig, 'id'>) {
-    const id = crypto.randomUUID()
-    configs.value.push({ ...config, id })
-    if (!activeConfigId.value) {
-      activeConfigId.value = id
-    }
-    void saveToStorage()
-    return id
+  async function addConfig(input: ProviderSaveInput): Promise<string> {
+    const config = await window.api.saveProviderConfig(input)
+    configs.value.push(config)
+    if (!activeConfigId.value) await setActiveConfig(config.id)
+    return config.id
   }
 
-  function updateConfig(id: string, updates: Partial<APIConfig>) {
-    const index = configs.value.findIndex((c) => c.id === id)
-    if (index !== -1) {
-      configs.value[index] = { ...configs.value[index], ...updates }
-      void saveToStorage()
-    }
+  async function updateConfig(id: string, updates: ProviderSaveInput): Promise<void> {
+    const config = await window.api.saveProviderConfig({ ...updates, id })
+    const index = configs.value.findIndex((item) => item.id === id)
+    if (index >= 0) configs.value[index] = config
   }
 
-  function deleteConfig(id: string) {
-    configs.value = configs.value.filter((c) => c.id !== id)
-    if (activeConfigId.value === id) {
-      activeConfigId.value = configs.value[0]?.id || null
-    }
-    void saveToStorage()
+  async function deleteConfig(id: string): Promise<void> {
+    const state = await window.api.deleteProviderConfig(id)
+    configs.value = state.configs
+    activeConfigId.value = state.activeConfigId
   }
 
-  function setActiveConfig(id: string) {
-    activeConfigId.value = id
-    void saveToStorage()
+  async function setActiveConfig(id: string): Promise<void> {
+    const state = await window.api.setActiveProviderConfig(id)
+    configs.value = state.configs
+    activeConfigId.value = state.activeConfigId
   }
 
-  async function saveToStorage() {
-    await window.api.setConfig('provider-config', {
-      configs: configs.value,
-      activeConfigId: activeConfigId.value
-    })
-  }
-
-  async function loadFromStorage() {
-    try {
-      const stored = (await window.api.getConfig('provider-config')) as
-        | {
-            configs?: APIConfig[]
-            activeConfigId?: string | null
-          }
-        | undefined
-
-      if (stored?.configs) {
-        configs.value = stored.configs
-        activeConfigId.value = stored.activeConfigId || null
-        return
-      }
-
-      const legacyConfigs = localStorage.getItem('ai-toolbox-configs')
-      if (legacyConfigs) {
-        configs.value = JSON.parse(legacyConfigs) as APIConfig[]
-        activeConfigId.value = localStorage.getItem('ai-toolbox-active-config') || null
-        await saveToStorage()
+  async function loadFromStorage(): Promise<void> {
+    let state = await window.api.listProviderConfigs()
+    if (!state.configs.length) {
+      const legacyJson = localStorage.getItem('ai-toolbox-configs')
+      if (legacyJson) {
+        const legacyConfigs = JSON.parse(legacyJson) as Array<Record<string, unknown>>
+        for (const legacy of legacyConfigs) {
+          await window.api.saveProviderConfig({
+            id: String(legacy.id || crypto.randomUUID()),
+            providerId: String(legacy.providerId || 'openai-compatible'),
+            providerName: String(legacy.providerName || 'OpenAI Compatible'),
+            kind: 'openai-compatible',
+            baseUrl: String(legacy.baseUrl || ''),
+            apiKey: String(legacy.apiKey || ''),
+            models: Array.isArray(legacy.models) ? legacy.models.map(String) : [],
+            selectedModel: String(legacy.selectedModel || ''),
+            embeddingModel: String(legacy.embeddingModel || 'text-embedding-3-small'),
+            requiresApiKey: true,
+            timeoutMs: 120000,
+            isActive: legacy.isActive !== false
+          })
+        }
+        const legacyActiveId = localStorage.getItem('ai-toolbox-active-config')
+        if (legacyActiveId) await window.api.setActiveProviderConfig(legacyActiveId)
         localStorage.removeItem('ai-toolbox-configs')
         localStorage.removeItem('ai-toolbox-active-config')
+        state = await window.api.listProviderConfigs()
       }
-    } catch {
-      configs.value = []
-      activeConfigId.value = null
     }
+    configs.value = state.configs
+    activeConfigId.value = state.activeConfigId
   }
 
   return {

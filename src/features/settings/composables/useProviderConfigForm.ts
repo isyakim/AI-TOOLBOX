@@ -24,7 +24,12 @@ export function useProviderConfigForm() {
     () => PROVIDERS.find((provider) => provider.id === selectedProviderId.value) || PROVIDERS[0]
   )
   const availableModels = computed(() => selectedProvider.value?.models || [])
-  const validationError = computed(() => validateProviderConnection(form.value))
+  const validationError = computed(() =>
+    validateProviderConnection({
+      ...form.value,
+      requiresApiKey: selectedProvider.value.requiresApiKey
+    })
+  )
   const canSave = computed(() => !validationError.value && Boolean(form.value.model.trim()))
 
   watch(
@@ -34,7 +39,7 @@ export function useProviderConfigForm() {
         baseUrl: selectedProvider.value.baseURL,
         apiKey: '',
         model: selectedProvider.value.models[0]?.value || '',
-        embeddingModel: 'text-embedding-3-small'
+        embeddingModel: selectedProvider.value.defaultEmbeddingModel
       }
       testResult.value = null
       statusMessage.value = ''
@@ -46,48 +51,71 @@ export function useProviderConfigForm() {
     isTesting.value = true
     testResult.value = null
     try {
-      testResult.value = await testProviderConnection(form.value)
+      testResult.value = await testProviderConnection({
+        providerId: selectedProviderId.value,
+        providerName: selectedProvider.value.name,
+        kind: selectedProvider.value.kind,
+        baseUrl: normalizeBaseUrl(form.value.baseUrl),
+        apiKey: form.value.apiKey.trim(),
+        models: form.value.model ? [form.value.model.trim()] : [],
+        selectedModel: form.value.model.trim(),
+        embeddingModel: form.value.embeddingModel.trim(),
+        requiresApiKey: selectedProvider.value.requiresApiKey,
+        timeoutMs: 15000,
+        isActive: true
+      })
+      if (testResult.value.success && testResult.value.models.length) {
+        form.value.model ||= testResult.value.models[0]
+      }
     } finally {
       isTesting.value = false
     }
   }
 
-  function saveConfig() {
+  async function saveConfig() {
     if (!canSave.value) {
       statusMessage.value = validationError.value || 'Model is required.'
       return
     }
     isSaving.value = true
-    const baseUrl = normalizeBaseUrl(form.value.baseUrl)
-    const duplicate = configStore.configs.find(
-      (config) =>
-        config.providerId === selectedProviderId.value &&
-        normalizeBaseUrl(config.baseUrl) === baseUrl
-    )
-    const data = {
-      providerId: selectedProviderId.value,
-      providerName: selectedProvider.value.name,
-      baseUrl,
-      apiKey: form.value.apiKey.trim(),
-      models: [form.value.model.trim()],
-      selectedModel: form.value.model.trim(),
-      embeddingModel: form.value.embeddingModel.trim() || 'text-embedding-3-small',
-      isActive: true
-    }
+    try {
+      const baseUrl = normalizeBaseUrl(form.value.baseUrl)
+      const duplicate = configStore.configs.find(
+        (config) =>
+          config.providerId === selectedProviderId.value &&
+          normalizeBaseUrl(config.baseUrl) === baseUrl
+      )
+      const data = {
+        providerId: selectedProviderId.value,
+        providerName: selectedProvider.value.name,
+        kind: selectedProvider.value.kind,
+        baseUrl,
+        apiKey: form.value.apiKey.trim(),
+        models: [form.value.model.trim()],
+        selectedModel: form.value.model.trim(),
+        embeddingModel: form.value.embeddingModel.trim() || 'text-embedding-3-small',
+        requiresApiKey: selectedProvider.value.requiresApiKey,
+        timeoutMs: 120000,
+        isActive: true
+      }
 
-    if (duplicate) {
-      configStore.updateConfig(duplicate.id, data)
-      configStore.setActiveConfig(duplicate.id)
-      statusMessage.value = 'Existing provider configuration updated.'
-    } else {
-      const id = configStore.addConfig(data)
-      configStore.setActiveConfig(id)
-      statusMessage.value = 'Provider configuration saved.'
+      if (duplicate) {
+        await configStore.updateConfig(duplicate.id, data)
+        await configStore.setActiveConfig(duplicate.id)
+        statusMessage.value = 'Existing provider configuration updated.'
+      } else {
+        const id = await configStore.addConfig(data)
+        await configStore.setActiveConfig(id)
+        statusMessage.value = 'Provider configuration saved.'
+      }
+      form.value.baseUrl = baseUrl
+      form.value.apiKey = ''
+      testResult.value = null
+    } catch (error: unknown) {
+      statusMessage.value = error instanceof Error ? error.message : 'Unable to save provider.'
+    } finally {
+      isSaving.value = false
     }
-
-    form.value.apiKey = ''
-    testResult.value = null
-    isSaving.value = false
   }
 
   function openDocs() {

@@ -2,7 +2,7 @@
 
 **A local-first AI agent workbench for developers.**
 
-AI Toolbox connects OpenAI-compatible models with a local project knowledge base, reusable developer workflows, cited answers, and file changes that require a diff preview before execution.
+AI Toolbox connects OpenAI-compatible and Ollama models with a local project knowledge base, reusable developer workflows, cited answers, and file changes that require a diff preview before execution.
 
 ![AI Toolbox desktop preview](docs/assets/ai-toolbox-preview.svg)
 
@@ -15,14 +15,14 @@ npm run dev
 
 ## What It Does
 
-- Streams AI chat responses from OpenAI-compatible providers.
+- Streams AI responses through the trusted Electron main process.
+- Supports OpenAI-compatible cloud providers and API-key-free local Ollama models.
 - Indexes selected local projects with LanceDB and incremental file hashes.
 - Shows source snippets and file paths with project-aware answers.
-- Runs ten built-in developer plugins such as PR Review, Test Case Generator, and Release Notes.
-- Imports and exports versioned, declarative plugin JSON files with visible permissions.
+- Loads ten built-in developer workflows from versioned plugin JSON files.
 - Requires a diff preview before write, edit, or delete file actions.
 - Restricts file operations to the selected workspace.
-- Stores provider credentials with Electron `safeStorage` instead of renderer local storage.
+- Separates public provider settings from credentials encrypted with Electron `safeStorage`.
 
 ## Product Boundary
 
@@ -34,10 +34,10 @@ Theme editors, generic tool galleries, arbitrary plugin JavaScript, and unrelate
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22.12+
 - npm 10+
-- An OpenAI-compatible chat endpoint
-- An embedding-capable endpoint for project indexing
+- An OpenAI-compatible endpoint or a local Ollama installation
+- An embedding-capable model for project indexing
 
 ## Development
 
@@ -57,19 +57,17 @@ npm run test:e2e
 npm run build
 ```
 
-Use `npm run lint:fix` and `npm run format` only when intentionally updating files.
-
 ## Architecture
 
 ```text
-electron/main/       Trusted Electron process, IPC handlers, RAG and workspace policy
+electron/main/       Trusted AI, credentials, IPC, RAG and workspace policy
 electron/preload/    Typed context bridge
 src/pages/           Thin application screens
-src/components/      Chat, plugin, and layout components
-src/services/        AI, RAG, plugin, and speech orchestration
+src/components/      Chat, plugin, knowledge and settings components
+src/services/        Renderer orchestration without provider credentials
 src/shared/          Shared IPC contracts and safe rendering utilities
-src/stores/          Pinia application state
-plugins/             Repository-owned plugin templates only
+src/stores/          Pinia application state containing public data only
+plugins/             Repository-owned plugin templates and build resources
 tests/unit/          Unit and security tests
 e2e/                 Electron Playwright tests
 docs/                Architecture, security, and plugin documentation
@@ -79,9 +77,9 @@ See [Architecture](docs/ARCHITECTURE.md), [Security](SECURITY.md), and [Plugin S
 
 ## 中文说明
 
-AI Toolbox 是一个面向开发者的本地优先 AI Agent 工作台。核心流程是：选择本地项目、建立增量索引、带引用地提问、运行可复用开发插件、预览文件差异并明确批准执行。
+AI Toolbox 是面向开发者的本地优先 AI Agent 工作台。它支持本地 Ollama 和 OpenAI 兼容服务，可以为本地项目建立索引、进行带引用的问答、运行开发工作流，并在执行文件修改前强制展示 Diff。
 
-项目已主动移除主题编辑器、泛用工具集合、UI 生成器和插件 JavaScript 执行能力，以换取更清晰的产品边界和更可靠的安全模型。
+项目主动排除了主题编辑器、通用工具集合、UI 生成器和任意插件 JavaScript 执行，以保持清晰的产品边界和可信的安全模型。
 
 ## Contributing
 

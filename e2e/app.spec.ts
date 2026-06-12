@@ -16,7 +16,7 @@ test.beforeAll(async () => {
 })
 
 test.afterAll(async () => {
-  await application.close()
+  if (application) await application.close()
 })
 
 test('starts on the chat workbench and accepts local input', async () => {
@@ -52,8 +52,9 @@ test('updates chat parameters without leaving the workbench', async () => {
 
 test('saves and deletes a provider configuration', async () => {
   await page.locator('.nav-item').filter({ hasText: 'Settings' }).click()
-  await page.getByLabel('Base URL').fill('https://api.example.com/v1/')
-  await page.getByLabel('API key').fill('e2e-placeholder-key')
+  await page.getByLabel('Provider').selectOption('ollama')
+  await page.getByLabel('Base URL').fill('http://127.0.0.1:11434/v1/')
+  await page.getByRole('textbox', { name: 'Model', exact: true }).fill('qwen3:8b')
   await page.getByRole('button', { name: 'Save configuration' }).click()
 
   await expect(
@@ -63,11 +64,21 @@ test('saves and deletes a provider configuration', async () => {
   ).toBeVisible()
   const savedConfiguration = page
     .locator('article')
-    .filter({ hasText: 'https://api.example.com/v1' })
+    .filter({ hasText: 'http://127.0.0.1:11434/v1' })
   await expect(savedConfiguration).toBeVisible()
   await savedConfiguration.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete configuration' }).click()
   await expect(savedConfiguration).toHaveCount(0)
+  await expect(
+    page.evaluate(() => window.api.getConfig('provider-config'))
+  ).resolves.toBeUndefined()
+})
+
+test('supports API-key-free Ollama configuration', async () => {
+  await page.locator('.nav-item').filter({ hasText: 'Settings' }).click()
+  await page.getByLabel('Provider').selectOption('ollama')
+  await expect(page.getByLabel(/API key/)).toBeDisabled()
+  await expect(page.getByLabel('Base URL')).toHaveValue('http://127.0.0.1:11434/v1')
 })
 
 test('exposes project selection and renders typed index status', async () => {

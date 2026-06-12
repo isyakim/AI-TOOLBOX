@@ -106,11 +106,6 @@ function setupIpcHandlers(): void {
 }
 
 export async function checkForUpdatesOnStartup(): Promise<void> {
-  if (process.env.NODE_ENV === 'development') {
-    log.info('Skipping update check in development mode')
-    return
-  }
-
   setTimeout(() => {
     void autoUpdater.checkForUpdates().catch((error: unknown) => {
       log.error('Failed to check for updates on startup:', error)

@@ -78,7 +78,7 @@ function addToChat(content: string, label = `Plugin result: ${activePlugin.value
     <header class="runner-header">
       <button class="back-btn" @click="pluginStore.setActivePlugin(null)">Back</button>
       <div class="plugin-meta">
-        <p>{{ activePlugin.id }} · v{{ activePlugin.version }}</p>
+        <p>{{ activePlugin.id }} | v{{ activePlugin.version }}</p>
         <h2>{{ activePlugin.name }}</h2>
         <span>{{ activePlugin.description }}</span>
       </div>
@@ -91,7 +91,7 @@ function addToChat(content: string, label = `Plugin result: ${activePlugin.value
             <p>INPUT</p>
             <h3>Workflow parameters</h3>
           </div>
-          <span>{{ activePlugin.permissions.join(' · ') }}</span>
+          <span>{{ activePlugin.permissions.join(' | ') }}</span>
         </header>
 
         <div class="fields-scroll">

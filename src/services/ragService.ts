@@ -20,18 +20,12 @@ export interface ProjectIndexOptions {
 }
 
 export interface ProviderRAGConfig {
-  apiKey: string
-  baseUrl: string
-  selectedModel?: string
-  embeddingModel?: string
+  id: string
 }
 
 export function toRAGConfig(config: ProviderRAGConfig): RAGConfigPayload {
   return {
-    apiKey: config.apiKey,
-    baseUrl: config.baseUrl,
-    model: config.selectedModel,
-    embeddingModel: config.embeddingModel
+    providerId: config.id
   }
 }
 

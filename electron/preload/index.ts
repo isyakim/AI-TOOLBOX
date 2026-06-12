@@ -1,9 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AIToolboxAPI,
+  AIChatStartPayload,
   FileActionPayload,
   PluginDocument,
+  ProviderSaveInput,
   RAGConfigPayload,
   RAGIngestPayload,
   RAGQueryPayload
@@ -22,6 +23,20 @@ const api: AIToolboxAPI = {
 
   // 系统信息
   platform: process.platform,
+
+  listProviderConfigs: () => ipcRenderer.invoke('providers:list'),
+  saveProviderConfig: (input: ProviderSaveInput) => ipcRenderer.invoke('providers:save', input),
+  deleteProviderConfig: (id: string) => ipcRenderer.invoke('providers:delete', id),
+  setActiveProviderConfig: (id: string) => ipcRenderer.invoke('providers:set-active', id),
+  testProvider: (input: ProviderSaveInput) => ipcRenderer.invoke('ai:test-provider', input),
+  startAIChat: (payload: AIChatStartPayload) => ipcRenderer.invoke('ai:chat:start', payload),
+  abortAIChat: (requestId: string) => ipcRenderer.invoke('ai:chat:abort', requestId),
+  onAIChatEvent: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) =>
+      callback(payload)
+    ipcRenderer.on('ai:chat:event', listener)
+    return () => ipcRenderer.removeListener('ai:chat:event', listener)
+  },
 
   // 文件操作
   fileAction: (payload: FileActionPayload) => ipcRenderer.invoke('file:action', payload),
@@ -51,12 +66,10 @@ const api: AIToolboxAPI = {
 // renderer only if context isolation is enabled
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
-  window.electron = electronAPI
   window.api = api
 }

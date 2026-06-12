@@ -15,7 +15,8 @@ Please report vulnerabilities privately through GitHub Security Advisories for `
 - File actions are limited to the selected workspace and reject traversal, absolute paths, and symlink escapes.
 - Mutating file actions require a diff preview before execution.
 - Plugins are declarative JSON workflows. Arbitrary plugin JavaScript is not executed.
-- API credentials are encrypted with the operating system through Electron `safeStorage`.
+- Public provider settings are stored separately from credentials encrypted through Electron `safeStorage`.
+- Chat, embedding, and provider connection requests run in the trusted main process. The renderer never receives stored credentials.
 - External windows are denied; only `http` and `https` links may open in the system browser.
 
 AI-generated file changes still require human review. Do not approve changes you have not inspected.
