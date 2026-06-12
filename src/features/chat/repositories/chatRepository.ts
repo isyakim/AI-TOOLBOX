@@ -1,7 +1,7 @@
-import type { ChatSettings, Message, Session } from '@/stores/chat'
+import type { ChatSettings, Message, Session } from '@/features/chat/types'
 
 const SNAPSHOT_KEY = 'ai-toolbox-chat'
-const SNAPSHOT_VERSION = 1
+const SNAPSHOT_VERSION = 2
 
 const LEGACY_KEYS = {
   sessions: 'ai-toolbox-sessions',
@@ -56,8 +56,6 @@ function normalizeSettings(value: unknown, defaults: ChatSettings): ChatSettings
     temperature: typeof value.temperature === 'number' ? value.temperature : defaults.temperature,
     contextLength:
       typeof value.contextLength === 'number' ? value.contextLength : defaults.contextLength,
-    enableStream:
-      typeof value.enableStream === 'boolean' ? value.enableStream : defaults.enableStream,
     enableMemory:
       typeof value.enableMemory === 'boolean' ? value.enableMemory : defaults.enableMemory,
     useRAG: typeof value.useRAG === 'boolean' ? value.useRAG : defaults.useRAG
@@ -86,7 +84,7 @@ export function loadChatSnapshot(
   storage: Storage = localStorage
 ): ChatSnapshot | null {
   const current = parseJson(storage.getItem(SNAPSHOT_KEY))
-  if (isRecord(current) && current.version === SNAPSHOT_VERSION) {
+  if (isRecord(current) && (current.version === 1 || current.version === SNAPSHOT_VERSION)) {
     const sessions = parseSessions(current.sessions)
     const activeSessionId =
       typeof current.activeSessionId === 'string' &&
@@ -97,13 +95,15 @@ export function loadChatSnapshot(
       ? String(current.currentRoleId)
       : options.defaultRoleId
 
-    return {
+    const snapshot: ChatSnapshot = {
       version: SNAPSHOT_VERSION,
       sessions,
       activeSessionId,
       currentRoleId,
       settings: normalizeSettings(current.settings, options.defaultSettings)
     }
+    if (current.version === 1) saveChatSnapshot(snapshot, storage)
+    return snapshot
   }
 
   const legacySessions = parseSessions(parseJson(storage.getItem(LEGACY_KEYS.sessions)))
