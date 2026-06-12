@@ -3,9 +3,11 @@ import { basename, dirname, join } from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createTwoFilesPatch } from 'diff'
+import { createHash } from 'node:crypto'
 import { setupRAGHandlers } from './rag'
 import { setupAIHandlers } from './ai'
 import { setupChatRepositoryHandlers } from './chatRepository'
+import { setupAgentExecutionHandlers } from './agentExecution'
 import {
   deleteProvider,
   listProviders,
@@ -84,6 +86,10 @@ function buildLineDiff(path: string, before: string, after: string): string {
   return createTwoFilesPatch(`a/${path}`, `b/${path}`, before, after, 'before', 'after', {
     context: 3
   })
+}
+
+function contentHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex')
 }
 
 function pluginFileName(id: string) {
@@ -306,6 +312,7 @@ app.whenReady().then(() => {
   setupAIHandlers()
   setupChatRepositoryHandlers()
   setupRAGHandlers()
+  setupAgentExecutionHandlers()
 
   // 文件操作 IPC 处理程序
   ipcMain.handle('file:action', async (_, rawPayload: unknown) => {
@@ -326,13 +333,33 @@ app.whenReady().then(() => {
           return { success: true, content: data }
         }
       } else if (action === 'write' || action === 'save' || action === 'edit') {
+        const exists = await fs
+          .stat(targetPath)
+          .then((stats) => stats.isFile())
+          .catch(() => false)
+        const currentContent = exists ? await fs.readFile(targetPath, 'utf-8') : ''
+        const currentHash = exists ? contentHash(currentContent) : 'missing'
+        if (!rawPayload.expectedHash || rawPayload.expectedHash !== currentHash)
+          return { success: false, message: 'File changed after preview. Refresh the diff.' }
         const dir = dirname(targetPath)
         await fs.mkdir(dir, { recursive: true })
-        await fs.writeFile(targetPath, content || '', 'utf-8')
-        return { success: true }
+        const tempPath = join(dir, `.${crypto.randomUUID()}.aitoolbox.tmp`)
+        try {
+          await fs.writeFile(tempPath, content || '', 'utf-8')
+          await fs.rename(tempPath, targetPath)
+        } finally {
+          await fs.rm(tempPath, { force: true }).catch(() => undefined)
+        }
+        return { success: true, resultHash: contentHash(content || '') }
       } else if (action === 'delete' || action === 'remove') {
+        const stats = await fs.stat(targetPath)
+        if (!stats.isFile())
+          return { success: false, message: 'Only regular files can be deleted.' }
+        const currentContent = await fs.readFile(targetPath, 'utf-8')
+        if (!rawPayload.expectedHash || rawPayload.expectedHash !== contentHash(currentContent))
+          return { success: false, message: 'File changed after preview. Refresh the diff.' }
         await fs.unlink(targetPath)
-        return { success: true }
+        return { success: true, resultHash: 'missing' }
       }
       return { success: false, message: `未知操作: ${action}` }
     } catch (error: unknown) {
@@ -348,15 +375,20 @@ app.whenReady().then(() => {
         return { success: false, message: 'Invalid file action payload.' }
       const { action, path, content } = rawPayload
       const targetPath = await resolveWorkspacePath(activeWorkspaceRoot, path)
-      const existingContent = await fs.readFile(targetPath, 'utf-8').catch(() => '')
+      const exists = await fs
+        .stat(targetPath)
+        .then((stats) => stats.isFile())
+        .catch(() => false)
+      const existingContent = exists ? await fs.readFile(targetPath, 'utf-8') : ''
       const nextContent = action === 'delete' || action === 'remove' ? '' : content || ''
 
       return {
         success: true,
-        exists: existingContent.length > 0,
+        exists,
         existingContent,
         nextContent,
-        diff: buildLineDiff(path, existingContent, nextContent)
+        diff: buildLineDiff(path, existingContent, nextContent),
+        expectedHash: exists ? contentHash(existingContent) : 'missing'
       }
     } catch (error: unknown) {
       return { success: false, message: errorMessage(error) }

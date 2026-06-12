@@ -4,6 +4,7 @@ export interface FileActionPayload {
   action: FileActionName
   path: string
   content?: string
+  expectedHash?: string
 }
 
 export interface FileActionResult {
@@ -11,6 +12,7 @@ export interface FileActionResult {
   content?: string
   message?: string
   entries?: string[]
+  resultHash?: string
 }
 
 export interface FilePreviewResult extends FileActionResult {
@@ -18,14 +20,20 @@ export interface FilePreviewResult extends FileActionResult {
   existingContent?: string
   nextContent?: string
   diff?: string
+  expectedHash?: string
 }
 
 export interface PluginDocument {
+  schemaVersion?: 1 | 2
   id: string
   name: string
   version: string
   systemPrompt: string
   fields: unknown[]
+  permissions?: string[]
+  compatibleAppVersion?: string
+  permissionReasons?: Record<string, string>
+  outputType?: 'markdown' | 'json' | 'changeset'
 }
 
 export type ProviderKind = 'openai-compatible' | 'ollama'
@@ -227,6 +235,92 @@ export interface ProjectMap {
   hotspots: Array<{ path: string; score: number; reason: string }>
 }
 
+export type AgentTaskStatus =
+  | 'draft'
+  | 'awaiting_approval'
+  | 'executing'
+  | 'verifying'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface AgentPlanStep {
+  id: string
+  title: string
+  description: string
+  status: 'pending' | 'completed' | 'failed'
+}
+
+export interface AgentTask {
+  id: string
+  projectId: string
+  objective: string
+  status: AgentTaskStatus
+  plan: AgentPlanStep[]
+  changeSetId?: string
+  verificationIds: string[]
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type ChangeSetAction = 'write' | 'delete'
+export type ChangeSetApproval = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed'
+
+export interface ChangeSetFile {
+  path: string
+  action: ChangeSetAction
+  content?: string
+  expectedHash: string
+  diff: string
+  additions: number
+  deletions: number
+  risk: 'low' | 'medium' | 'high'
+}
+
+export interface ChangeSet {
+  id: string
+  taskId: string
+  projectId: string
+  files: ChangeSetFile[]
+  approval: ChangeSetApproval
+  additions: number
+  deletions: number
+  risks: string[]
+  createdAt: string
+}
+
+export interface ChangeSetExecutionResult {
+  success: boolean
+  completed: Array<{ path: string; resultHash: string }>
+  failed?: { path: string; message: string }
+  skipped: string[]
+}
+
+export interface CommandProposal {
+  id: string
+  taskId: string
+  projectId: string
+  scriptName: string
+  command: string
+  reason: string
+  timeoutMs: number
+  approved: boolean
+  packageHash: string
+}
+
+export interface VerificationResult {
+  id: string
+  taskId: string
+  proposalId: string
+  scriptName: string
+  exitCode: number | null
+  durationMs: number
+  output: string
+  timedOut: boolean
+  createdAt: string
+}
+
 export interface ProjectHealthFinding {
   title: string
   status: 'good' | 'watch' | 'needs-work' | string
@@ -297,4 +391,24 @@ export interface AIToolboxAPI {
     rootPath: string
   }) => Promise<{ success: boolean; report?: ProjectHealthReport; message?: string }>
   ragClear: () => Promise<{ success: boolean }>
+  listAgentTasks: (projectId?: string) => Promise<AgentTask[]>
+  createAgentTask: (input: { projectId: string; objective: string }) => Promise<AgentTask>
+  saveAgentPlan: (input: { taskId: string; steps: string[] }) => Promise<AgentTask>
+  approveAgentPlan: (taskId: string) => Promise<AgentTask>
+  cancelAgentTask: (taskId: string) => Promise<AgentTask>
+  previewChangeSet: (input: {
+    taskId: string
+    projectId: string
+    files: Array<{ path: string; action: ChangeSetAction; content?: string }>
+  }) => Promise<ChangeSet>
+  approveChangeSet: (changeSetId: string) => Promise<ChangeSet>
+  getAgentChangeSet: (taskId: string) => Promise<ChangeSet | null>
+  executeChangeSet: (changeSetId: string) => Promise<ChangeSetExecutionResult>
+  listVerificationCommands: (input: {
+    taskId: string
+    projectId: string
+  }) => Promise<CommandProposal[]>
+  approveVerificationCommand: (proposalId: string) => Promise<CommandProposal>
+  runVerificationCommand: (proposalId: string) => Promise<VerificationResult>
+  listVerificationResults: (taskId: string) => Promise<VerificationResult[]>
 }

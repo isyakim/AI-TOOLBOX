@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import ActivityLog from '@/components/knowledge/ActivityLog.vue'
 import HealthReportPanel from '@/components/knowledge/HealthReportPanel.vue'
 import IndexStatusPanel from '@/components/knowledge/IndexStatusPanel.vue'
@@ -9,13 +10,29 @@ import {
   useKnowledgeWorkspace
 } from '@/features/knowledge/composables/useKnowledgeWorkspace'
 import ConfirmDialog from '@/shared/components/ConfirmDialog.vue'
+import { useAgentStore } from '@/stores/agent'
 
 const workspace = useKnowledgeWorkspace()
+const agentStore = useAgentStore()
+const router = useRouter()
 const clearDialogOpen = ref(false)
 
 async function clearKnowledge() {
   await workspace.clearKnowledge()
   clearDialogOpen.value = false
+}
+
+async function createRepairTask() {
+  const report = workspace.healthReport.value
+  if (!report) return
+  const findings = report.findings
+    .filter((finding) => finding.status !== 'good')
+    .map((finding) => `${finding.title}: ${finding.detail}`)
+    .join('\n')
+  const task = await agentStore.run(() =>
+    agentStore.create(`Resolve the following project health findings:\n${findings}`)
+  )
+  if (task) await router.push('/agent')
 }
 
 onMounted(() => void workspace.restore())
@@ -63,7 +80,7 @@ onMounted(() => void workspace.restore())
         @resume="workspace.resumeIndex"
         @cancel="workspace.cancelIndex"
       />
-      <HealthReportPanel :report="workspace.healthReport.value" />
+      <HealthReportPanel :report="workspace.healthReport.value" @create-task="createRepairTask" />
     </div>
     <ActivityLog :entries="workspace.activityLog.value" />
   </div>

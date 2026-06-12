@@ -1,4 +1,11 @@
 {
+  "schemaVersion": 2,
+  "compatibleAppVersion": ">=2.0.0",
+  "permissionReasons": {
+    "ai:chat": "Required to generate the workflow result.",
+    "chat:context": "Allows the user to explicitly send the result into a chat session."
+  },
+  "outputType": "markdown",
   "id": "regex-lab",
   "name": "Regex Lab",
   "icon": "DEV",

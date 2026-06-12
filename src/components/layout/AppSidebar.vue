@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { path: '/chat', title: 'Chat', key: 'CH' },
   { path: '/knowledge', title: 'Knowledge', key: 'KB' },
   { path: '/project-map', title: 'Project Map', key: 'MAP' },
+  { path: '/agent', title: 'Agent Tasks', key: 'RUN' },
   { path: '/plugins', title: 'Plugins', key: 'PL' },
   { path: '/settings', title: 'Settings', key: 'CFG' },
   { path: '/about', title: 'About', key: 'i' }

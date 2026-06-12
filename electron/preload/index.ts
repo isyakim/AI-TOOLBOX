@@ -69,7 +69,21 @@ const api: AIToolboxAPI = {
     ipcRenderer.invoke('workspace-projects:set-active', projectId),
   getProjectMap: (projectId) => ipcRenderer.invoke('project-map:get', projectId),
   projectHealthCheck: (payload) => ipcRenderer.invoke('project:health-check', payload),
-  ragClear: () => ipcRenderer.invoke('rag:clear')
+  ragClear: () => ipcRenderer.invoke('rag:clear'),
+  listAgentTasks: (projectId) => ipcRenderer.invoke('agent:tasks:list', projectId),
+  createAgentTask: (input) => ipcRenderer.invoke('agent:tasks:create', input),
+  saveAgentPlan: (input) => ipcRenderer.invoke('agent:plan:save', input),
+  approveAgentPlan: (taskId) => ipcRenderer.invoke('agent:plan:approve', taskId),
+  cancelAgentTask: (taskId) => ipcRenderer.invoke('agent:task:cancel', taskId),
+  previewChangeSet: (input) => ipcRenderer.invoke('agent:changeset:preview', input),
+  approveChangeSet: (changeSetId) => ipcRenderer.invoke('agent:changeset:approve', changeSetId),
+  getAgentChangeSet: (taskId) => ipcRenderer.invoke('agent:changeset:get', taskId),
+  executeChangeSet: (changeSetId) => ipcRenderer.invoke('agent:changeset:execute', changeSetId),
+  listVerificationCommands: (input) => ipcRenderer.invoke('agent:commands:list', input),
+  approveVerificationCommand: (proposalId) =>
+    ipcRenderer.invoke('agent:command:approve', proposalId),
+  runVerificationCommand: (proposalId) => ipcRenderer.invoke('agent:command:run', proposalId),
+  listVerificationResults: (taskId) => ipcRenderer.invoke('agent:results:list', taskId)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

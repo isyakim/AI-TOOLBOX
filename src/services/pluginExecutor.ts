@@ -29,6 +29,16 @@ export async function executePlugin(ctx: PluginExecutionContext): Promise<Plugin
   const startedAt = Date.now()
   const aiClient = getAIClient()
 
+  if (!ctx.plugin.permissions.includes('ai:chat')) {
+    return {
+      success: false,
+      rawOutput: '',
+      processedOutput: '',
+      error: 'This plugin did not declare the ai:chat permission.',
+      executionTime: 0
+    }
+  }
+
   if (!aiClient) {
     return {
       success: false,

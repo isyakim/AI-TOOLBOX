@@ -53,7 +53,7 @@ export const useChatStore = defineStore('chat', () => {
       currentRoleId: currentRoleId.value,
       settings: settings.value
     }
-    void window.api.saveChatSnapshot(snapshot)
+    void window.api.saveChatSnapshot(JSON.parse(JSON.stringify(snapshot)) as ChatSnapshot)
   }
 
   function createSession(): string {
