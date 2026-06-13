@@ -42,6 +42,8 @@ The renderer starts a chat request using a provider configuration ID. The main p
 
 Agent tasks and execution records are persisted under `userData/agent-execution.json`. A task must move through plan approval before it can propose a ChangeSet. Each proposed file records the content hash observed during preview; execution stops if any file changed, and remaining actions are reported as skipped.
 
+The main-process boundary is split into a persistence repository, ChangeSet service, verification service, and thin IPC handlers. The renderer follows the same shape: the Agent page only composes focused workflow panels and a feature composable.
+
 Writes use a temporary file in the target directory followed by an atomic rename. Deletes only accept regular files. Verification commands are derived from the active workspace's `package.json`; only script names containing `lint`, `typecheck`, `test`, or `build` are exposed, each command requires separate approval, and execution is capped at 120 seconds.
 
 Plugin permissions are runtime capabilities rather than labels. Provider access requires `ai:chat`, chat insertion requires `chat:context`, and file actions require `file:read` or `file:write`. Imported schema v1 plugins are normalized to schema v2 and inspected for dangerous prompt patterns.
