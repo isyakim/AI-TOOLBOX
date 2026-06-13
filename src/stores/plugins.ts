@@ -17,6 +17,7 @@ export interface PluginField {
 }
 
 export interface Plugin {
+  schemaVersion: 2
   id: string
   name: string
   icon: string
@@ -27,6 +28,9 @@ export interface Plugin {
   systemPrompt: string
   fields: PluginField[]
   permissions: PluginPermission[]
+  compatibleAppVersion: string
+  permissionReasons: Partial<Record<PluginPermission, string>>
+  outputType: 'markdown' | 'json' | 'changeset'
   tags: string[]
   createdAt: string
   updatedAt: string
@@ -47,18 +51,33 @@ export const PLUGIN_CATEGORIES: Array<{ id: PluginCategory; name: string; icon: 
 function normalizePlugin(
   plugin: Partial<Plugin> & Pick<Plugin, 'id' | 'name' | 'version' | 'systemPrompt' | 'fields'>
 ): Plugin {
-  return {
+  const permissions: PluginPermission[] = Array.isArray(plugin.permissions)
+    ? plugin.permissions.filter((permission): permission is PluginPermission =>
+        ['ai:chat', 'file:read', 'file:write', 'rag:query', 'chat:context'].includes(permission)
+      )
+    : ['ai:chat']
+  const categories: PluginCategory[] = ['coding', 'analysis', 'writing', 'utility', 'other']
+  const normalized: Plugin = {
     icon: 'EXT',
     description: '',
     author: 'Unknown',
-    category: 'other',
-    permissions: ['ai:chat'],
     tags: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isInstalled: true,
-    ...plugin
+    ...plugin,
+    category: categories.includes(plugin.category || 'other')
+      ? plugin.category || 'other'
+      : 'other',
+    permissions,
+    compatibleAppVersion: plugin.compatibleAppVersion || '>=2.0.0',
+    permissionReasons: plugin.permissionReasons || {
+      'ai:chat': 'Required to generate the workflow result.'
+    },
+    outputType: plugin.outputType || 'markdown',
+    schemaVersion: 2 as const
   }
+  return normalized
 }
 
 function parsePlugin(json: string): Plugin {
@@ -163,7 +182,14 @@ export const usePluginStore = defineStore('plugins', () => {
         plugin
       ]
       void savePlugin(plugin)
-      return { success: true, message: 'Plugin imported.', plugin }
+      const warnings = inspectPluginPrompt(plugin.systemPrompt)
+      return {
+        success: true,
+        message: warnings.length
+          ? `Plugin imported with warnings: ${warnings.join(' ')}`
+          : 'Plugin imported and migrated to schema v2.',
+        plugin
+      }
     } catch (error: unknown) {
       return {
         success: false,
@@ -202,3 +228,14 @@ export const usePluginStore = defineStore('plugins', () => {
     loadFromStorage: syncFromDisk
   }
 })
+
+function inspectPluginPrompt(prompt: string): string[] {
+  const warnings: string[] = []
+  if (/ignore (all|previous) instructions/i.test(prompt))
+    warnings.push('Prompt attempts to override previous instructions.')
+  if (/(api[-_ ]?key|password|credential|secret).*(print|reveal|return|send)/i.test(prompt))
+    warnings.push('Prompt may request sensitive credentials.')
+  if (/(delete|remove).*(directory|folder|repository)/i.test(prompt))
+    warnings.push('Prompt requests destructive directory operations.')
+  return warnings
+}

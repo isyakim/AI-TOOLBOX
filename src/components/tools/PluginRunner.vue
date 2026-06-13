@@ -67,6 +67,10 @@ function stopExecution() {
 }
 
 function addToChat(content: string, label = `Plugin result: ${activePlugin.value?.name}`) {
+  if (!activePlugin.value?.permissions.includes('chat:context')) {
+    executionStage.value = 'Blocked: chat:context permission is not declared.'
+    return
+  }
   if (!content.trim()) return
   const sessionId = chatStore.activeSessionId || chatStore.createSession()
   chatStore.addMessage(sessionId, { role: 'system', content: `[${label}]\n\n${content}` })
@@ -113,6 +117,7 @@ function addToChat(content: string, label = `Plugin result: ${activePlugin.value
       <PluginOutputPanel
         :streaming-output="streamingOutput"
         :result="result"
+        :permissions="activePlugin.permissions"
         @send-to-chat="addToChat($event)"
         @file-action-executed="addToChat($event, 'Plugin file action result')"
       />

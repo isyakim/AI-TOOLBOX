@@ -35,5 +35,8 @@ describe('chat store', () => {
     expect(window.api.saveChatSnapshot).not.toHaveBeenCalled()
     store.persist()
     expect(window.api.saveChatSnapshot).toHaveBeenCalledTimes(1)
+    expect(() =>
+      structuredClone(vi.mocked(window.api.saveChatSnapshot).mock.calls[0][0])
+    ).not.toThrow()
   })
 })

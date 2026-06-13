@@ -5,11 +5,22 @@ import {
   type ElectronApplication,
   type Page
 } from '@playwright/test'
+import { promises as fs } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 let application: ElectronApplication
 let page: Page
+let agentFixturePath: string
 
 test.beforeAll(async () => {
+  agentFixturePath = await fs.mkdtemp(join(tmpdir(), 'ai-toolbox-agent-e2e-'))
+  await fs.writeFile(join(agentFixturePath, 'target.txt'), 'before\n', 'utf-8')
+  await fs.writeFile(
+    join(agentFixturePath, 'package.json'),
+    JSON.stringify({ scripts: { 'test:fixture': `node -e "console.log('e2e verified')"` } }),
+    'utf-8'
+  )
   application = await electron.launch({ args: ['.'] })
   page = await application.firstWindow()
   await page.waitForLoadState('domcontentloaded')
@@ -17,6 +28,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   if (application) await application.close()
+  if (agentFixturePath) await fs.rm(agentFixturePath, { recursive: true, force: true })
 })
 
 test('starts on the chat workbench and accepts local input', async () => {
@@ -92,4 +104,35 @@ test('exposes the project map as a first-class product area', async () => {
   await page.locator('.nav-item').filter({ hasText: 'Project Map' }).click()
   await expect(page.getByRole('heading', { name: 'Project map', exact: true })).toBeVisible()
   await expect(page.getByText(/Index the active project/)).toBeVisible()
+})
+
+test('exposes the approval-gated Agent task workflow', async () => {
+  await page.evaluate(async (rootPath) => {
+    const project = await window.api.registerWorkspaceProject(rootPath)
+    await window.api.setActiveWorkspaceProject(project.id)
+  }, agentFixturePath)
+  await page.reload()
+  await page.waitForLoadState('domcontentloaded')
+  await page.locator('.nav-item').filter({ hasText: 'Agent Tasks' }).click()
+  await expect(page.getByRole('heading', { name: 'Agent tasks', exact: true })).toBeVisible()
+  await page.getByPlaceholder('Describe the concrete task').fill('Update and verify target.txt')
+  await page.getByRole('button', { name: 'Create draft' }).click()
+  await page
+    .getByPlaceholder('One implementation step per line')
+    .fill('Update target.txt\nRun tests')
+  await page.getByRole('button', { name: 'Submit plan for approval' }).click()
+  await page.getByRole('button', { name: 'Approve plan' }).click()
+  await page.getByPlaceholder('Relative file path').fill('target.txt')
+  await page.getByPlaceholder('Complete replacement content').fill('after\n')
+  await page.getByRole('button', { name: 'Generate Diff preview' }).click()
+  await expect(page.getByText('WRITE target.txt')).toBeVisible()
+  await page.getByRole('button', { name: 'Approve ChangeSet' }).click()
+  await page.getByRole('button', { name: 'Execute approved changes' }).click()
+  await expect(page.getByText('Applied 1 file change(s).')).toBeVisible()
+  await page.getByRole('button', { name: 'Discover package scripts' }).click()
+  await expect(page.getByText('npm run test:fixture')).toBeVisible()
+  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  await page.getByRole('button', { name: 'Run', exact: true }).click()
+  await expect(page.getByText(/test:fixture \/ exit 0/)).toBeVisible()
+  await expect(fs.readFile(join(agentFixturePath, 'target.txt'), 'utf-8')).resolves.toBe('after\n')
 })

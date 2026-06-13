@@ -13,7 +13,7 @@ const emit = defineEmits<{
 
 const status = ref<Record<number, 'pending' | 'running' | 'success' | 'error'>>({})
 const results = ref<Record<number, string>>({})
-const previews = ref<Record<number, { diff: string; exists: boolean }>>({})
+const previews = ref<Record<number, { diff: string; exists: boolean; expectedHash: string }>>({})
 const previewStatus = ref<Record<number, 'idle' | 'loading' | 'ready' | 'error'>>({})
 
 function getStatus(index: number) {
@@ -33,7 +33,8 @@ async function previewAction(action: FileActionPayload, index: number) {
     if (res.success) {
       previews.value[index] = {
         diff: res.diff || '',
-        exists: Boolean(res.exists)
+        exists: Boolean(res.exists),
+        expectedHash: res.expectedHash || 'missing'
       }
       previewStatus.value[index] = 'ready'
     } else {
@@ -55,7 +56,12 @@ async function executeAction(action: FileActionPayload, index: number) {
   status.value[index] = 'running'
 
   try {
-    const res = await window.api.fileAction(action)
+    const res = await window.api.fileAction({
+      ...action,
+      expectedHash: requiresFileActionPreview(action)
+        ? previews.value[index]?.expectedHash
+        : action.expectedHash
+    })
     if (res.success) {
       status.value[index] = 'success'
       let resultText = ''

@@ -37,6 +37,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Project Map' }
   },
   {
+    path: '/agent',
+    name: 'AgentTasks',
+    component: () => import('@/pages/AgentTasksPage.vue'),
+    meta: { title: 'Agent Tasks' }
+  },
+  {
     path: '/about',
     name: 'About',
     component: () => import('@/pages/AboutPage.vue'),

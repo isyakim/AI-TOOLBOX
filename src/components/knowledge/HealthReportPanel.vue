@@ -2,6 +2,7 @@
 import type { ProjectHealthReport } from '@/shared/types/ipc'
 
 defineProps<{ report: ProjectHealthReport | null }>()
+const emit = defineEmits<{ createTask: [] }>()
 </script>
 
 <template>
@@ -18,6 +19,7 @@ defineProps<{ report: ProjectHealthReport | null }>()
         </div>
         <span :class="finding.status">{{ finding.status }}</span>
       </article>
+      <button @click="emit('createTask')">Create Agent repair task</button>
     </div>
   </section>
 </template>
@@ -45,6 +47,15 @@ p {
   display: grid;
   gap: 8px;
   margin-top: 14px;
+}
+
+button {
+  min-height: 34px;
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  background: var(--primary);
+  color: #ffffff;
+  cursor: pointer;
 }
 
 article {

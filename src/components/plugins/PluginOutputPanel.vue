@@ -4,10 +4,12 @@ import FileActionPanel from '@/components/chat/FileActionPanel.vue'
 import type { PluginExecutionResult } from '@/services/pluginExecutor'
 import { renderSafeMarkdown } from '@/shared/services/markdown'
 import { parseFileActions } from '@/shared/services/fileActions'
+import type { PluginPermission } from '@/stores/plugins'
 
 const props = defineProps<{
   streamingOutput: string
   result: PluginExecutionResult | null
+  permissions: PluginPermission[]
 }>()
 
 const emit = defineEmits<{
@@ -24,7 +26,14 @@ const output = computed(() =>
 )
 
 const parsedActions = computed(() => parseFileActions(output.value))
-const fileActions = computed(() => parsedActions.value.actions)
+const fileActions = computed(() =>
+  parsedActions.value.actions.filter((action) =>
+    action.action === 'read'
+      ? props.permissions.includes('file:read')
+      : props.permissions.includes('file:write')
+  )
+)
+const blockedActions = computed(() => parsedActions.value.actions.length - fileActions.value.length)
 
 async function copyOutput() {
   if (!output.value) return
@@ -67,6 +76,10 @@ async function copyOutput() {
         ></div>
         <p v-if="parsedActions.invalidBlocks" class="action-warning">
           {{ parsedActions.invalidBlocks }} invalid file action block(s) were ignored.
+        </p>
+        <p v-if="blockedActions" class="action-warning">
+          {{ blockedActions }} file action(s) were blocked because the plugin did not declare the
+          required permission.
         </p>
         <FileActionPanel
           v-if="fileActions.length"

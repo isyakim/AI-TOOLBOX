@@ -37,3 +37,11 @@ Every vector and query carries a required project ID. Citations include the proj
 ## Provider Requests
 
 The renderer starts a chat request using a provider configuration ID. The main process resolves credentials, performs the request, and emits typed token, completion, or error events associated with a request ID. Ollama uses the same OpenAI-compatible chat and embedding path without requiring an API key.
+
+## Controlled Agent Execution
+
+Agent tasks and execution records are persisted under `userData/agent-execution.json`. A task must move through plan approval before it can propose a ChangeSet. Each proposed file records the content hash observed during preview; execution stops if any file changed, and remaining actions are reported as skipped.
+
+Writes use a temporary file in the target directory followed by an atomic rename. Deletes only accept regular files. Verification commands are derived from the active workspace's `package.json`; only script names containing `lint`, `typecheck`, `test`, or `build` are exposed, each command requires separate approval, and execution is capped at 120 seconds.
+
+Plugin permissions are runtime capabilities rather than labels. Provider access requires `ai:chat`, chat insertion requires `chat:context`, and file actions require `file:read` or `file:write`. Imported schema v1 plugins are normalized to schema v2 and inspected for dangerous prompt patterns.
