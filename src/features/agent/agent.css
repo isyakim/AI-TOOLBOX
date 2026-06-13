@@ -1,0 +1,229 @@
+.agent-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-columns: 280px minmax(0, 1fr);
+  background: #f8fafc;
+}
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 18px 14px;
+  border-right: 1px solid var(--border);
+  background: #fff;
+}
+.task-list header p,
+.task-header p {
+  margin: 0;
+  color: var(--text-light);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.task-list h1,
+.task-header h2 {
+  margin: 3px 0 12px;
+}
+.new-task {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.task-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.task-row.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.task-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+.task-row span,
+.empty {
+  color: var(--text-light);
+  font-size: 0.72rem;
+}
+.task-workspace {
+  min-width: 0;
+  overflow: auto;
+  padding: 20px;
+}
+.empty-main {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--text-light);
+}
+.task-header,
+.section-title,
+.section-title > div,
+.summary,
+.actions,
+.command-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.status {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+.workflow-section {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+.workflow-section.disabled {
+  opacity: 0.62;
+}
+.section-title h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.section-title span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 4px;
+  background: #172033;
+  color: #fff;
+  font-size: 0.72rem;
+}
+.agent-page textarea,
+.agent-page input,
+.agent-page select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+.agent-page button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+.agent-page button.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.agent-page button.danger {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #fff;
+}
+.agent-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.file-editor-list,
+.changeset {
+  display: grid;
+  gap: 10px;
+}
+.file-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
+  gap: 8px;
+}
+.file-editor textarea {
+  grid-column: 1 / -1;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.76rem;
+}
+.summary {
+  justify-content: flex-start;
+}
+.added {
+  color: #15803d;
+}
+.deleted,
+.cancel-task {
+  color: #b91c1c;
+}
+.risk,
+.error {
+  padding: 8px 10px;
+  border: 1px solid #fbbf24;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.76rem;
+}
+.agent-page details {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+.agent-page summary {
+  padding: 9px 11px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.76rem;
+}
+.agent-page pre {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 0.74rem;
+}
+.command-row {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+.command-row > div {
+  display: grid;
+  gap: 3px;
+}
+.command-row code {
+  color: var(--text-light);
+  font-size: 0.72rem;
+}
+@media (max-width: 900px) {
+  .agent-page {
+    grid-template-columns: 1fr;
+  }
+  .task-list {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-editor {
+    grid-template-columns: 1fr;
+  }
+  .file-editor textarea {
+    grid-column: auto;
+  }
+}

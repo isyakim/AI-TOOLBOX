@@ -83,6 +83,9 @@
     "vitest": "^3.2.6",
     "vue-tsc": "^2.2.2"
   },
+  "overrides": {
+    "esbuild": "0.28.1"
+  },
   "build": {
     "appId": "com.isyakim.ai-toolbox",
     "productName": "AI Toolbox",
